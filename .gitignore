@@ -8,3 +8,5 @@ __pycache__/
 reports/
 .DS_Store
 
+
+.vercel
