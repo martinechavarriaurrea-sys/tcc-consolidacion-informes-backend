@@ -10,3 +10,4 @@ reports/
 
 
 .vercel
+.env*.local

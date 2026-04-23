@@ -9,12 +9,12 @@ from alembic import context
 
 # Importar todos los modelos para que Alembic los detecte
 from app.core.config import get_settings
-from app.core.database import Base
+from app.core.database import Base, database_url
 import app.models  # noqa: F401
 
 settings = get_settings()
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

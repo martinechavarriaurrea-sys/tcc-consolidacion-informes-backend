@@ -2,6 +2,7 @@ import os
 import shutil
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -12,6 +13,31 @@ settings = get_settings()
 
 
 def _resolve_database_url(raw_url: str) -> str:
+    if raw_url.startswith("postgres://"):
+        raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif raw_url.startswith("postgresql://"):
+        raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    # Neon/libpq URLs include sslmode and channel_binding params.
+    # asyncpg expects `ssl` and does not accept `channel_binding`.
+    if raw_url.startswith("postgresql+asyncpg://"):
+        parsed = urlparse(raw_url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if "sslmode" in query:
+            query["ssl"] = "require" if query["sslmode"] == "require" else query["sslmode"]
+            query.pop("sslmode", None)
+        query.pop("channel_binding", None)
+        raw_url = urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                urlencode(query),
+                parsed.fragment,
+            )
+        )
+
     # On Vercel, the deployment bundle is read-only. Copy bundled sqlite DB to /tmp
     # so API writes can work within the warm instance lifecycle.
     if os.getenv("VERCEL") and raw_url.startswith("sqlite+aiosqlite:///./"):
