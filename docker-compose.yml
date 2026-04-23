@@ -1,0 +1,97 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TCC-CONSOLIDACION-INFORMES — Docker Compose
+# Uso local:  docker-compose up --build
+# Producción: usar docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Base de datos PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: tcc_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tcc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tcc_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-tcc_informes}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tcc_user} -d ${POSTGRES_DB:-tcc_informes}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Backend FastAPI ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tcc_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tcc_user}:${POSTGRES_PASSWORD:-tcc_pass}@db:5432/${POSTGRES_DB:-tcc_informes}
+      REPORTS_OUTPUT_DIR: /app/reports
+    volumes:
+      # Reportes generados persisten fuera del contenedor
+      - ./reports:/app/reports
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Frontend Next.js ──────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: tcc_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    profiles:
+      - full  # Solo inicia con: docker-compose --profile full up
+
+  # ── Migraciones (solo para primer arranque o CI) ─────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tcc_migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tcc_user}:${POSTGRES_PASSWORD:-tcc_pass}@db:5432/${POSTGRES_DB:-tcc_informes}
+    command: ["alembic", "upgrade", "head"]
+    profiles:
+      - migrate  # Solo inicia con: docker-compose --profile migrate up migrate
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: tcc_network
