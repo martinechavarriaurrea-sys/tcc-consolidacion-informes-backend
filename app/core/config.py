@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -74,6 +75,8 @@ class Settings(BaseSettings):
     @property
     def reports_path(self) -> Path:
         p = Path(self.reports_output_dir)
+        if os.getenv("VERCEL") and not p.is_absolute():
+            p = Path("/tmp") / p
         p.mkdir(parents=True, exist_ok=True)
         return p
 
