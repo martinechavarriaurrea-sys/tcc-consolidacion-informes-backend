@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -89,7 +89,7 @@ class ShipmentRepository(BaseRepository[Shipment]):
             select(
                 Shipment.advisor_name,
                 func.count().label("total"),
-                func.sum(Shipment.is_active).label("active"),
+                func.sum(case((Shipment.is_active == True, 1), else_=0)).label("active"),  # noqa: E712
                 func.count(Shipment.delivered_at).label("delivered"),
             ).group_by(Shipment.advisor_name)
         )

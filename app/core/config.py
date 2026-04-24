@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     # Consolidado semanal: lunes 07:00
     # Alertas: cada N minutos
     alert_check_interval_minutes: int = 30
+    cron_secret: str = ""
 
     # Alertas
     alert_no_movement_hours: int = 72

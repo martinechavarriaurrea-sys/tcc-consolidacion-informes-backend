@@ -1,9 +1,10 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth, dashboard, guias, health, reports, shipments, sistema, tracking
+from app.api.v1 import auth, cron, dashboard, guias, health, reports, shipments, sistema, tracking
 from app.core.config import get_settings
 from app.core.exceptions import AppError, app_error_handler, generic_error_handler
 from app.core.logging import configure_logging
@@ -16,7 +17,7 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler_started = False
-    if not settings.disable_scheduler:
+    if not settings.disable_scheduler and not os.getenv("VERCEL"):
         await start_scheduler()
         scheduler_started = True
     yield
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(tracking.router, prefix=prefix)
     app.include_router(dashboard.router, prefix=prefix)
     app.include_router(reports.router, prefix=prefix)
+    app.include_router(cron.router, prefix="/api")
 
     return app
 

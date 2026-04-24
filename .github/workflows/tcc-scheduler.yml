@@ -1,0 +1,50 @@
+name: TCC scheduled tracking
+
+on:
+  schedule:
+    # Colombia time (America/Bogota, UTC-5):
+    # 07:00, 12:00, 16:00 -> 12:00, 17:00, 21:00 UTC.
+    - cron: "0 12 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+    inputs:
+      cycle:
+        description: "Cycle to run"
+        required: true
+        default: "1200"
+        type: choice
+        options:
+          - "0700"
+          - "1200"
+          - "1600"
+
+jobs:
+  dispatch:
+    name: Dispatch tracking cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Resolve cycle
+        id: cycle
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            cycle="${{ inputs.cycle }}"
+          else
+            case "${{ github.event.schedule }}" in
+              "0 12 * * *") cycle="0700" ;;
+              "0 17 * * *") cycle="1200" ;;
+              "0 21 * * *") cycle="1600" ;;
+              *) echo "Unknown schedule: ${{ github.event.schedule }}" >&2; exit 1 ;;
+            esac
+          fi
+
+          echo "cycle=$cycle" >> "$GITHUB_OUTPUT"
+
+      - name: Call Vercel backend
+        shell: bash
+        run: |
+          url="https://tcc-consolidacion-informes-backend.vercel.app/api/cron/daily-dispatch?cycle=${{ steps.cycle.outputs.cycle }}"
+          curl --fail --show-error --silent --retry 3 --retry-delay 10 --max-time 600 "$url"
