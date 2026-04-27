@@ -61,6 +61,8 @@ async def main() -> None:
     cron_token = os.environ["CRON_TOKEN"]
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
@@ -89,13 +91,13 @@ async def main() -> None:
     msg.attach(MIMEText(html, "html", "utf-8"))
 
     context = ssl.create_default_context()
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+    with smtplib.SMTP(smtp_host, smtp_port) as smtp:
         smtp.ehlo()
         smtp.starttls(context=context)
         smtp.login(smtp_user, smtp_password)
         smtp.sendmail(smtp_user, [recipient], msg.as_bytes())
 
-    logger.info("alert_worker_email_sent", alerts=len(alerts), recipient=recipient)
+    logger.info("alert_worker_email_sent", alerts=len(alerts), recipient=recipient, host=smtp_host)
 
 
 if __name__ == "__main__":

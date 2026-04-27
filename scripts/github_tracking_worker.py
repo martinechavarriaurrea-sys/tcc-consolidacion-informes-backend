@@ -42,6 +42,8 @@ def _send_smtp_email(
 ) -> bool:
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
 
     if not smtp_user or not smtp_password:
@@ -59,13 +61,13 @@ def _send_smtp_email(
     msg.attach(part)
 
     context = ssl.create_default_context()
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+    with smtplib.SMTP(smtp_host, smtp_port) as smtp:
         smtp.ehlo()
         smtp.starttls(context=context)
         smtp.login(smtp_user, smtp_password)
         smtp.sendmail(smtp_user, [recipient], msg.as_bytes())
 
-    logger.info("github_worker_email_sent", recipient=recipient, filename=pdf_filename)
+    logger.info("github_worker_email_sent", recipient=recipient, host=smtp_host, filename=pdf_filename)
     return True
 
 
