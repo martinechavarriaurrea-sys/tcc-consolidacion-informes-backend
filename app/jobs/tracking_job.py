@@ -25,6 +25,7 @@ nueva si no hay una alerta abierta del mismo tipo para esa guía (anti-spam).
 Cuando la guía tiene movimiento, la alerta se marca resuelta.
 """
 
+import base64
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -80,6 +81,8 @@ async def _save_report_file(
     week_end: date | None = None,
     email_sent: bool = False,
     email_sent_at: datetime | None = None,
+    content_b64: str | None = None,
+    content_type: str | None = None,
 ) -> ReportFile:
     import os
     size = os.path.getsize(file_path) if os.path.exists(file_path) else None
@@ -95,6 +98,8 @@ async def _save_report_file(
         generated_at=utcnow(),
         email_sent=email_sent,
         email_sent_at=email_sent_at,
+        content_b64=content_b64,
+        content_type=content_type,
     )
     session.add(rf)
     await session.flush()
@@ -293,7 +298,9 @@ async def _generate_daily_report(
     await _save_report_file(session, report_type="daily", fmt="xlsx",
                             filename=xlsx_path.name, file_path=str(xlsx_path), cycle_label=cycle_label)
     await _save_report_file(session, report_type="daily", fmt="pdf",
-                            filename=pdf_path.name, file_path=str(pdf_path), cycle_label=cycle_label)
+                            filename=pdf_path.name, file_path=str(pdf_path), cycle_label=cycle_label,
+                            content_b64=base64.b64encode(pdf_path.read_bytes()).decode(),
+                            content_type="application/pdf")
 
     return pdf_path
 
@@ -344,6 +351,14 @@ async def job_daily_cycle(cycle_label: str) -> None:
                 html = body_daily_report(cycle_ts.strftime("%d/%m/%Y"), cycle_label)
                 sent = await send_email(to=DAILY_RECIPIENTS, subject="Seguimiento TCC",
                                         body_html=html, attachments=[pdf_path])
+                if sent:
+                    from sqlalchemy import update
+
+                    await session.execute(
+                        update(ReportFile)
+                        .where(ReportFile.filename == pdf_path.name)
+                        .values(email_sent=True, email_sent_at=utcnow())
+                    )
                 logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
             await session.commit()
             logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=pdf_path is not None)
@@ -395,11 +410,21 @@ async def job_weekly_report() -> None:
                                     week_start=week_start, week_end=week_end)
             await _save_report_file(session, report_type="weekly", fmt="pdf",
                                     filename=pdf_path.name, file_path=str(pdf_path),
-                                    week_start=week_start, week_end=week_end)
+                                    week_start=week_start, week_end=week_end,
+                                    content_b64=base64.b64encode(pdf_path.read_bytes()).decode(),
+                                    content_type="application/pdf")
 
             html = body_weekly_report(week_start_str, week_end_str)
             sent = await send_email(to=WEEKLY_RECIPIENTS, subject="Seguimiento TCC",
                                     body_html=html, attachments=[pdf_path])
+            if sent:
+                from sqlalchemy import update
+
+                await session.execute(
+                    update(ReportFile)
+                    .where(ReportFile.filename == pdf_path.name)
+                    .values(email_sent=True, email_sent_at=utcnow())
+                )
 
             await session.commit()
             logger.info("job_weekly_report_done", email_sent=sent, week_start=week_start_str,
@@ -439,7 +464,9 @@ async def job_weekly_report_pdf() -> "tuple[Path, str, str] | None":
 
             await _save_report_file(session, report_type="weekly", fmt="pdf",
                                     filename=pdf_path.name, file_path=str(pdf_path),
-                                    week_start=week_start, week_end=week_end)
+                                    week_start=week_start, week_end=week_end,
+                                    content_b64=base64.b64encode(pdf_path.read_bytes()).decode(),
+                                    content_type="application/pdf")
             await session.commit()
             logger.info("job_weekly_report_pdf_done", pdf=str(pdf_path))
             return pdf_path, week_start_str, week_end_str

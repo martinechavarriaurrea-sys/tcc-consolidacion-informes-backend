@@ -42,6 +42,10 @@ def _send_smtp_email(
     subject: str,
     body_html: str,
 ) -> bool:
+    if os.getenv("SKIP_SMTP_EMAIL", "").strip().lower() in {"1", "true", "yes"}:
+        logger.info("github_worker_email_deferred_to_local_outlook filename=%s", pdf_filename)
+        return False
+
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")

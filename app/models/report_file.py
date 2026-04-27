@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -26,6 +26,8 @@ class ReportFile(Base):
     filename: Mapped[str] = mapped_column(String(300), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_b64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Etiqueta del ciclo: "0700" | "1200" | "1600" (solo para tipo daily)
     cycle_label: Mapped[str | None] = mapped_column(String(10), nullable=True)

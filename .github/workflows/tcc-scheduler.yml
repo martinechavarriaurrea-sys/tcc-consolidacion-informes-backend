@@ -7,7 +7,6 @@ on:
     - cron: "0 17 * * *"      # 12:00 Bogota
     - cron: "0 21 * * *"      # 16:00 Bogota
     - cron: "0 11 * * 1"      # cleanup, Monday 06:00 Bogota
-    - cron: "*/30 * * * *"    # alerts every 30 minutes
   workflow_dispatch:
     inputs:
       job:
@@ -95,10 +94,6 @@ jobs:
               echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
               echo "job=cleanup" >> "$GITHUB_OUTPUT"
               ;;
-            "*/30 * * * *")
-              echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
-              echo "job=alerts" >> "$GITHUB_OUTPUT"
-              ;;
             *)
               echo "Unsupported schedule: ${{ github.event.schedule }}" >&2
               exit 1
@@ -150,6 +145,7 @@ jobs:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+          SKIP_SMTP_EMAIL: "true"
         run: |
           set -euo pipefail
           python scripts/github_tracking_worker.py daily "${{ steps.target.outputs.cycle }}"

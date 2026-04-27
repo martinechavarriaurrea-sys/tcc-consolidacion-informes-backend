@@ -5,6 +5,7 @@ Uso:
     python scripts/run_job.py daily 0700
     python scripts/run_job.py daily 1200
     python scripts/run_job.py daily 1600
+    python scripts/run_job.py email 1600
     python scripts/run_job.py weekly
     python scripts/run_job.py alerts
     python scripts/run_job.py cleanup
@@ -23,6 +24,7 @@ logger = get_logger("run_job")
 
 VALID_JOBS = {
     "daily": ["0700", "1200", "1600"],
+    "email": ["0700", "1200", "1600"],
     "weekly": None,
     "alerts": None,
     "cleanup": None,
@@ -35,6 +37,7 @@ Jobs disponibles:
   daily 0700   - Ciclo diario 07:00
   daily 1200   - Ciclo diario 12:00
   daily 1600   - Ciclo diario 16:00
+  email 1600   - Envia reporte pendiente del ciclo por Outlook; si no existe, ejecuta ciclo completo
   weekly       - Consolidado semanal
   alerts       - Verificacion de alertas 72h
   cleanup      - Limpieza de guias antiguas
@@ -56,6 +59,13 @@ async def main(job_name: str, cycle_label: str | None) -> None:
             print(f"ERROR: cycle_label debe ser uno de: {VALID_JOBS['daily']}")
             sys.exit(1)
         await job_daily_cycle(cycle_label)
+    elif job_name == "email":
+        if cycle_label not in VALID_JOBS["email"]:
+            print(f"ERROR: cycle_label debe ser uno de: {VALID_JOBS['email']}")
+            sys.exit(1)
+        from scripts.local_email_dispatcher import send_pending_daily
+
+        await send_pending_daily(cycle_label, fallback_run=True)
     elif job_name == "weekly":
         await job_weekly_report()
     elif job_name == "alerts":
@@ -79,8 +89,8 @@ if __name__ == "__main__":
         print(f"ERROR: Job desconocido '{job}'\n{USAGE}")
         sys.exit(1)
 
-    if job == "daily" and cycle is None:
-        print("ERROR: El job 'daily' requiere un cycle_label: 0700 | 1200 | 1600\n")
+    if job in {"daily", "email"} and cycle is None:
+        print(f"ERROR: El job '{job}' requiere un cycle_label: 0700 | 1200 | 1600\n")
         sys.exit(1)
 
     asyncio.run(main(job, cycle))
