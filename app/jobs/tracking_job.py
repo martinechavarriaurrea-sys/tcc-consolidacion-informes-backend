@@ -252,6 +252,87 @@ async def _collect_weekly_rows(
     return rows
 
 
+async def _generate_daily_report(
+    session: AsyncSession,
+    *,
+    cycle_label: str,
+    cycle_ts: datetime,
+    cycle_started_at: datetime | None,
+) -> bool:
+    report_date = cycle_ts.date()
+    rows = await _collect_daily_rows(session, cycle_ts, cycle_started_at)
+    logger.info("job_daily_cycle_rows", count=len(rows))
+
+    if not rows:
+        logger.info("job_daily_cycle_no_rows", cycle=cycle_label)
+        return False
+
+    ts_str = report_date.strftime("%Y-%m-%d")
+    base_name = f"reporte_tcc_diario_{ts_str}_{cycle_label}"
+    xlsx_path = settings.reports_daily_path / f"{base_name}.xlsx"
+    pdf_path = settings.reports_daily_path / f"{base_name}.pdf"
+
+    _excel_svc.generate_daily(rows, xlsx_path, cycle_label, report_date)
+    _pdf_svc.generate_daily(rows, pdf_path, cycle_label, report_date, utcnow())
+    logger.info("job_daily_cycle_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
+
+    daily_files = [
+        await _save_report_file(
+            session,
+            report_type="daily",
+            fmt="xlsx",
+            filename=xlsx_path.name,
+            file_path=str(xlsx_path),
+            cycle_label=cycle_label,
+        ),
+        await _save_report_file(
+            session,
+            report_type="daily",
+            fmt="pdf",
+            filename=pdf_path.name,
+            file_path=str(pdf_path),
+            cycle_label=cycle_label,
+        ),
+    ]
+
+    subject = f"Reporte TCC Diario - {report_date.strftime('%Y-%m-%d')} {cycle_label[:2]}:{cycle_label[2:]}"
+    html = body_daily_report(report_date.strftime("%d/%m/%Y"), cycle_label)
+    sent = await send_email(
+        to=DAILY_RECIPIENTS,
+        subject=subject,
+        body_html=html,
+        attachments=[xlsx_path, pdf_path],
+    )
+
+    if sent:
+        now = utcnow()
+        for report_file in daily_files:
+            report_file.email_sent = True
+            report_file.email_sent_at = now
+
+    logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
+    return True
+
+
+async def job_daily_report_only(cycle_label: str, cycle_started_at: datetime | None = None) -> bool:
+    """Genera el reporte diario desde el estado actual de BD, sin consultar TCC."""
+    cycle_ts = _bogota_now()
+    async with AsyncSessionLocal() as session:
+        try:
+            generated = await _generate_daily_report(
+                session,
+                cycle_label=cycle_label,
+                cycle_ts=cycle_ts,
+                cycle_started_at=cycle_started_at,
+            )
+            await session.commit()
+            return generated
+        except Exception:
+            logger.exception("job_daily_report_only_error", cycle=cycle_label)
+            await session.rollback()
+            raise
+
+
 # ── Job: ciclo diario ─────────────────────────────────────────────────────────
 
 async def job_daily_cycle(cycle_label: str) -> None:
@@ -261,7 +342,6 @@ async def job_daily_cycle(cycle_label: str) -> None:
     """
     logger.info("job_daily_cycle_start", cycle=cycle_label)
     cycle_ts = _bogota_now()
-    report_date = cycle_ts.date()
 
     async with AsyncSessionLocal() as session:
         try:
@@ -270,6 +350,15 @@ async def job_daily_cycle(cycle_label: str) -> None:
             run = await tracking_svc.run_full(run_type=f"scheduled_{cycle_label}")
             await session.commit()
             logger.info("job_daily_cycle_tracking_done", run_id=run.id, status=run.status)
+            generated = await _generate_daily_report(
+                session,
+                cycle_label=cycle_label,
+                cycle_ts=cycle_ts,
+                cycle_started_at=run.started_at,
+            )
+            await session.commit()
+            logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=generated)
+            return
 
             # 2. Recolecta datos del ciclo (incluye las recién entregadas)
             rows = await _collect_daily_rows(session, cycle_ts, run.started_at)

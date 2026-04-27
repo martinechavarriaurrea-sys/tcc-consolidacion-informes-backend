@@ -56,15 +56,20 @@ jobs:
             case "${{ inputs.job }}" in
               daily)
                 echo "path=/api/cron/daily-dispatch?cycle=${{ inputs.cycle }}" >> "$GITHUB_OUTPUT"
+                echo "job=daily" >> "$GITHUB_OUTPUT"
+                echo "cycle=${{ inputs.cycle }}" >> "$GITHUB_OUTPUT"
                 ;;
               weekly)
                 echo "path=/api/cron/weekly" >> "$GITHUB_OUTPUT"
+                echo "job=weekly" >> "$GITHUB_OUTPUT"
                 ;;
               alerts)
                 echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
+                echo "job=alerts" >> "$GITHUB_OUTPUT"
                 ;;
               cleanup)
                 echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
+                echo "job=cleanup" >> "$GITHUB_OUTPUT"
                 ;;
             esac
             exit 0
@@ -73,18 +78,26 @@ jobs:
           case "${{ github.event.schedule }}" in
             "0 12 * * *")
               echo "path=/api/cron/daily-dispatch?cycle=0700" >> "$GITHUB_OUTPUT"
+              echo "job=daily" >> "$GITHUB_OUTPUT"
+              echo "cycle=0700" >> "$GITHUB_OUTPUT"
               ;;
             "0 17 * * *")
               echo "path=/api/cron/daily-dispatch?cycle=1200" >> "$GITHUB_OUTPUT"
+              echo "job=daily" >> "$GITHUB_OUTPUT"
+              echo "cycle=1200" >> "$GITHUB_OUTPUT"
               ;;
             "0 21 * * *")
               echo "path=/api/cron/daily-dispatch?cycle=1600" >> "$GITHUB_OUTPUT"
+              echo "job=daily" >> "$GITHUB_OUTPUT"
+              echo "cycle=1600" >> "$GITHUB_OUTPUT"
               ;;
             "0 11 * * 1")
               echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
+              echo "job=cleanup" >> "$GITHUB_OUTPUT"
               ;;
             "*/30 * * * *")
               echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
+              echo "job=alerts" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unsupported schedule: ${{ github.event.schedule }}" >&2
@@ -107,7 +120,37 @@ jobs:
           echo "::add-mask::${token}"
           echo "token=${token}" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout backend worker
+        if: steps.target.outputs.job == 'daily'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.target.outputs.job == 'daily'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend dependencies
+        if: steps.target.outputs.job == 'daily'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run GitHub TCC worker
+        if: steps.target.outputs.job == 'daily'
+        shell: bash
+        env:
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          CRON_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          python scripts/github_tracking_worker.py daily "${{ steps.target.outputs.cycle }}"
+
       - name: Call backend cron endpoint
+        if: steps.target.outputs.job != 'daily'
         shell: bash
         run: |
           set -euo pipefail

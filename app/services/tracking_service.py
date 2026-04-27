@@ -101,12 +101,14 @@ class TrackingService:
 
     async def _process_one(self, shipment: Shipment, provider) -> tuple[bool, bool]:
         result: IntegrationResult = await provider.fetch(shipment.tracking_number)
+        return await self.apply_result(shipment, result)
 
+    async def apply_result(self, shipment: Shipment, result: IntegrationResult) -> tuple[bool, bool]:
         if not result.fetch_success or not result.events:
             logger.warning(
                 "tracking_fetch_failed",
                 tracking=shipment.tracking_number,
-                provider=getattr(provider, "provider_name", "unknown"),
+                provider=result.provider,
                 fetch_error=result.fetch_error,
             )
             return False, False
