@@ -1,5 +1,5 @@
 from math import ceil
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -29,14 +29,11 @@ ALERT_TYPE_MAP = {
 ISSUE_STATUSES = {"novedad", "devuelto"}
 
 
-def _dias_en_transito(shipment: Shipment) -> int:
-    ref = shipment.first_seen_at or shipment.created_at
-    if not ref:
-        return 0
-    now = datetime.now(timezone.utc)
-    if ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
-    return max(0, (now - ref).days)
+def _dias_en_transito(shipment: Shipment) -> int | None:
+    if shipment.shipping_date:
+        end = shipment.delivered_at.date() if shipment.delivered_at else date.today()
+        return max(0, (end - shipment.shipping_date).days)
+    return None
 
 
 def _to_resumen(shipment: Shipment, tiene_alerta: bool) -> dict:
@@ -47,6 +44,7 @@ def _to_resumen(shipment: Shipment, tiene_alerta: bool) -> dict:
         "cliente": shipment.client_name,
         "estado_actual": shipment.current_status or "registrado",
         "fecha_ultima_actualizacion": shipment.updated_at.isoformat() if shipment.updated_at else None,
+        "fecha_despacho": shipment.shipping_date.isoformat() if shipment.shipping_date else None,
         "dias_en_transito": _dias_en_transito(shipment),
         "activa": shipment.is_active,
         "tiene_alerta": tiene_alerta,
@@ -82,6 +80,7 @@ class RegistrarGuiaPayload(BaseModel):
     numero_guia: str
     asesor: str
     cliente: str | None = None
+    fecha_despacho: date | None = None
 
 
 @router.get("")
@@ -157,6 +156,7 @@ async def create_guia(
             tracking_number=payload.numero_guia,
             advisor_name=payload.asesor,
             client_name=payload.cliente,
+            shipping_date=payload.fecha_despacho,
         ))
     except DuplicateError:
         raise HTTPException(status_code=409, detail="La guía ya existe en el sistema.")
