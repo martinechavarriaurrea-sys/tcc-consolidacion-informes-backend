@@ -25,7 +25,10 @@ async def system_health():
     scheduler_mode = "external" if running_on_vercel else ("disabled" if settings.disable_scheduler else "embedded")
     scheduler_activo = False
     email_configured = bool(settings.smtp_user and settings.smtp_password)
-    cron_protected = bool(settings.cron_secret)
+    cron_protected = bool(
+        settings.cron_secret
+        or (settings.github_oidc_repository and settings.github_oidc_audience and settings.github_oidc_ref)
+    )
 
     try:
         async with AsyncSessionLocal() as session:
