@@ -273,7 +273,7 @@ class PdfService:
                        generated_at: datetime) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        period = f"{report_date.strftime('%d/%m/%Y')}  —  Ciclo {cycle_label}"
+        period = f"{report_date.strftime('%d/%m/%Y')} -Ciclo {cycle_label}"
         doc = SimpleDocTemplate(str(output_path), pagesize=A4,
             leftMargin=2*cm, rightMargin=2*cm,
             topMargin=3.8*cm, bottomMargin=2.5*cm)

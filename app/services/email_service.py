@@ -116,7 +116,7 @@ def _send_via_outlook_sync(
 
         script = r"""
 param([string]$PayloadPath)
-$payload = Get-Content -Raw -LiteralPath $PayloadPath | ConvertFrom-Json
+$payload = Get-Content -Raw -LiteralPath $PayloadPath -Encoding UTF8 | ConvertFrom-Json
 $outlook = New-Object -ComObject Outlook.Application
 $mail = $outlook.CreateItem(0)
 $mail.To = ($payload.to -join '; ')
@@ -274,8 +274,8 @@ def body_daily_report(report_date: str, cycle_label: str) -> str:
     return f"""
     <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
     <div style="border-left:4px solid #1B3A6B;padding-left:16px;margin-bottom:16px">
-      <h2 style="color:#1B3A6B;margin:0">Reporte Diario de Guías TCC</h2>
-      <p style="color:#666;margin:4px 0">{report_date} — Ciclo {cycle_label}</p>
+      <h2 style="color:#1B3A6B;margin:0">Seguimiento de Guias TCC</h2>
+      <p style="color:#666;margin:4px 0">{report_date} - Ciclo {cycle_label}</p>
     </div>
     <p>Se adjuntan los archivos Excel y PDF con el detalle del ciclo.</p>
     <p style="color:#888;font-size:12px;margin-top:32px">
@@ -290,7 +290,7 @@ def body_weekly_report(week_start: str, week_end: str) -> str:
     return f"""
     <html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
     <div style="border-left:4px solid #1B3A6B;padding-left:16px;margin-bottom:16px">
-      <h2 style="color:#1B3A6B;margin:0">Consolidado Semanal de Guías TCC</h2>
+      <h2 style="color:#1B3A6B;margin:0">Seguimiento de Guias TCC - Consolidado Semanal</h2>
       <p style="color:#666;margin:4px 0">Semana: {week_start} al {week_end}</p>
     </div>
     <p>Se adjuntan los archivos Excel y PDF con el consolidado de la semana.</p>
