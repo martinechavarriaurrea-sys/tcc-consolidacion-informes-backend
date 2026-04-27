@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -10,6 +10,7 @@ class ShipmentCreate(BaseModel):
     client_name: str | None = Field(None, max_length=200)
     package_type: str | None = Field(None, max_length=100)
     destination: str | None = Field(None, max_length=300)
+    shipping_date: date | None = Field(None, description="Fecha en que se despachó la guía")
 
     @field_validator("tracking_number")
     @classmethod
@@ -27,6 +28,7 @@ class ShipmentUpdate(BaseModel):
     client_name: str | None = Field(None, max_length=200)
     package_type: str | None = Field(None, max_length=100)
     destination: str | None = Field(None, max_length=300)
+    shipping_date: date | None = Field(None)
 
 
 class TrackingEventOut(BaseModel):
@@ -55,6 +57,7 @@ class ShipmentOut(BaseModel):
     current_status_raw: str | None
     current_status_at: datetime | None
     first_seen_at: datetime
+    shipping_date: date | None
     delivered_at: datetime | None
     closed_at: datetime | None
     is_active: bool

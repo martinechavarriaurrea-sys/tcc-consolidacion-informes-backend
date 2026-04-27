@@ -157,6 +157,13 @@ async def _collect_daily_rows(
         if not shipment.is_active and shipment.delivered_at:
             obs_parts.append("Entregado en este ciclo")
 
+        # Dias en transito desde fecha de despacho
+        days_in_transit = None
+        if shipment.shipping_date:
+            end = (shipment.delivered_at.date() if shipment.delivered_at
+                   else cycle_date)
+            days_in_transit = (end - shipment.shipping_date).days
+
         rows.append(DailyReportRow(
             query_date=cycle_date,
             query_time=cycle_time_str,
@@ -171,6 +178,8 @@ async def _collect_daily_rows(
             is_delivered=not shipment.is_active and bool(shipment.delivered_at),
             is_alert=is_alert,
             observations="; ".join(obs_parts),
+            shipping_date=shipment.shipping_date,
+            days_in_transit=days_in_transit,
         ))
 
     # Ordena: primero alertas, luego activas, luego entregadas

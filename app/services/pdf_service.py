@@ -292,16 +292,19 @@ class PdfService:
         story.append(Spacer(1, 0.6*cm))
 
         W   = A4[0] - 4*cm
-        hdrs = ["# Guia", "Cliente", "Asesor", "Estado TCC", "Ult. Actualizacion", "Dias"]
-        cws  = [W*.13, W*.24, W*.18, W*.20, W*.18, W*.07]
+        hdrs = ["# Guia", "Cliente", "Asesor", "Estado", "F. Despacho", "Dias Transito"]
+        cws  = [W*.13, W*.22, W*.16, W*.18, W*.16, W*.15]
 
         rows_data, status_keys = [], []
         for r in rows:
             txt, _, _ = _s(r.current_status)
             rows_data.append([
-                r.tracking_number, r.client_name or "—", r.advisor_name, txt,
-                r.last_event_at.strftime("%d/%m/%Y %H:%M") if r.last_event_at else "—",
-                str(int(r.days_without_movement or 0)),
+                r.tracking_number,
+                r.client_name or "—",
+                r.advisor_name,
+                txt,
+                r.shipping_date.strftime("%d/%m/%Y") if r.shipping_date else "—",
+                str(r.days_in_transit) if r.days_in_transit is not None else "—",
             ])
             status_keys.append(r.current_status)
 

@@ -45,6 +45,8 @@ class DailyReportRow:
     is_delivered: bool
     is_alert: bool
     observations: str
+    shipping_date: date | None = None   # fecha de despacho ingresada al registrar
+    days_in_transit: int | None = None  # dias desde shipping_date hasta entrega (o hoy)
 
 
 @dataclass
@@ -141,15 +143,14 @@ class ExcelService:
         "Cliente",
         "Estado Actual",
         "Estado Raw (TCC)",
+        "Fecha Despacho",
+        "Dias en Transito",
         "Última Novedad",
-        "Horas sin Movimiento",
-        "Días sin Movimiento",
-        "Entregado",
         "Alerta 72h",
         "Observaciones",
     ]
 
-    _DAILY_COL_WIDTHS = [14, 12, 18, 22, 25, 18, 35, 22, 20, 18, 12, 12, 40]
+    _DAILY_COL_WIDTHS = [14, 12, 18, 22, 25, 18, 35, 16, 16, 22, 12, 40]
 
     # Columnas del reporte semanal
     _WEEKLY_HEADERS = [
@@ -215,11 +216,10 @@ class ExcelService:
                 row.client_name or "—",
                 row.current_status,
                 row.current_status_raw or "—",
+                row.shipping_date.strftime("%Y-%m-%d") if row.shipping_date else "—",
+                row.days_in_transit if row.days_in_transit is not None else "—",
                 row.last_event_at.strftime("%Y-%m-%d %H:%M") if row.last_event_at else "—",
-                round(row.hours_without_movement, 1) if row.hours_without_movement is not None else "—",
-                round(row.days_without_movement, 1) if row.days_without_movement is not None else "—",
-                "Sí" if row.is_delivered else "No",
-                "⚠ Sí" if row.is_alert else "No",
+                "Si" if row.is_alert else "No",
                 row.observations or "",
             ]
 
@@ -228,7 +228,7 @@ class ExcelService:
                 cell.font = _body_font(bold=row.is_delivered or row.is_alert)
                 cell.fill = _fill(row_bg)
                 cell.border = _thin_border()
-                cell.alignment = _center() if col_idx in (1, 2, 9, 10, 11, 12) else _left()
+                cell.alignment = _center() if col_idx in (1, 2, 8, 9, 11) else _left()
 
         _set_column_widths(ws, self._DAILY_COL_WIDTHS)
         ws.row_dimensions[header_row].height = 28

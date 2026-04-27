@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,6 +15,7 @@ class Shipment(Base):
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     package_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     destination: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    shipping_date: Mapped["date | None"] = mapped_column(Date, nullable=True)
 
     # Estado normalizado (categoría) y estado raw (exacto de TCC)
     current_status: Mapped[str] = mapped_column(String(50), nullable=False, default="desconocido")
