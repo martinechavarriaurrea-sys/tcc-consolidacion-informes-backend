@@ -326,7 +326,14 @@ async def cleanup_dispatch(authorization: str | None = Header(default=None)):
 @router.post("/apply-migration")
 async def apply_migration(authorization: str | None = Header(default=None)):
     """Aplica migraciones de schema pendientes. Solo para uso en deploy."""
-    await _verify_cron_authorization(authorization)
+    token = _extract_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        from jose import jwt as _jwt
+        _jwt.decode(token, settings.app_secret_key, algorithms=["HS256"])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     from sqlalchemy import text
     from app.core.database import AsyncSessionLocal
     results = []
