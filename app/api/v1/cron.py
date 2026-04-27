@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -13,10 +14,12 @@ from app.core.logging import get_logger
 from app.integrations.tcc.base import TrackingEventData, TrackingResult
 from app.jobs.tracking_job import (
     job_check_alerts,
+    job_check_alerts_data,
     job_cleanup_old_guias,
     job_daily_cycle,
     job_daily_report_only,
     job_weekly_report,
+    job_weekly_report_pdf,
 )
 from app.models.tracking_run import TrackingRun
 from app.services.tracking_service import TrackingService
@@ -244,30 +247,42 @@ async def ingest_tracking_results(
         await session.commit()
 
     jobs = ["tracking_ingest"]
-    report_generated = False
+    pdf_b64: str | None = None
+    pdf_filename: str | None = None
+    weekly_pdf_b64: str | None = None
+    weekly_pdf_filename: str | None = None
+    weekly_period: str | None = None
+
     if payload.cycle_label:
-        report_generated = await job_daily_report_only(payload.cycle_label, run_started_at)
+        pdf_path = await job_daily_report_only(payload.cycle_label, run_started_at)
         jobs.append(f"daily_report_{payload.cycle_label}")
+        if pdf_path and pdf_path.exists():
+            pdf_b64 = base64.b64encode(pdf_path.read_bytes()).decode()
+            pdf_filename = pdf_path.name
 
         now = datetime.now(BOGOTA_TZ)
         if now.weekday() == 0 and payload.cycle_label == "0700":
-            await job_weekly_report()
+            result = await job_weekly_report_pdf()
+            if result:
+                w_path, w_start, w_end = result
+                weekly_pdf_b64 = base64.b64encode(w_path.read_bytes()).decode()
+                weekly_pdf_filename = w_path.name
+                weekly_period = f"{w_start} al {w_end}"
             jobs.append("weekly")
 
-    logger.info(
-        "cron_ingest_tracking_done",
-        checked=checked,
-        updated=updated,
-        failed=failed,
-        report_generated=report_generated,
-    )
+    logger.info("cron_ingest_tracking_done", checked=checked, updated=updated,
+                failed=failed, has_pdf=pdf_b64 is not None)
     return {
         "status": "completed",
         "jobs": jobs,
         "checked": checked,
         "updated": updated,
         "failed": failed,
-        "report_generated": report_generated,
+        "pdf_b64": pdf_b64,
+        "pdf_filename": pdf_filename,
+        "weekly_pdf_b64": weekly_pdf_b64,
+        "weekly_pdf_filename": weekly_pdf_filename,
+        "weekly_period": weekly_period,
     }
 
 
@@ -278,6 +293,16 @@ async def alerts_dispatch(authorization: str | None = Header(default=None)):
     await job_check_alerts()
     logger.info("cron_alerts_dispatch_done")
     return {"status": "completed", "jobs": ["alerts"]}
+
+
+@router.get("/alert-data")
+async def alert_data_dispatch(authorization: str | None = Header(default=None)):
+    """Detecta alertas 72h, las registra en BD y retorna datos para que GitHub Actions envie email."""
+    await _verify_cron_authorization(authorization)
+    logger.info("cron_alert_data_start")
+    alerts = await job_check_alerts_data()
+    logger.info("cron_alert_data_done", count=len(alerts))
+    return {"status": "completed", "new_alerts": alerts, "count": len(alerts)}
 
 
 @router.get("/weekly")

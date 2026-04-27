@@ -121,36 +121,52 @@ jobs:
           echo "token=${token}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout backend worker
-        if: steps.target.outputs.job == 'daily'
+        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.target.outputs.job == 'daily'
+        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install backend dependencies
-        if: steps.target.outputs.job == 'daily'
+        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run GitHub TCC worker
+      - name: Run GitHub TCC worker (consulta TCC + genera PDF + envia email)
         if: steps.target.outputs.job == 'daily'
         shell: bash
         env:
           BACKEND_URL: ${{ env.BACKEND_URL }}
           CRON_TOKEN: ${{ steps.oidc.outputs.token }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: |
           set -euo pipefail
           python scripts/github_tracking_worker.py daily "${{ steps.target.outputs.cycle }}"
 
-      - name: Call backend cron endpoint
-        if: steps.target.outputs.job != 'daily'
+      - name: Run alert email worker (verifica 72h + envia email si hay alertas)
+        if: steps.target.outputs.job == 'alerts'
+        shell: bash
+        env:
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          CRON_TOKEN: ${{ steps.oidc.outputs.token }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          python scripts/alert_email_worker.py
+
+      - name: Call backend cron endpoint (weekly / cleanup)
+        if: steps.target.outputs.job == 'weekly' || steps.target.outputs.job == 'cleanup'
         shell: bash
         run: |
           set -euo pipefail

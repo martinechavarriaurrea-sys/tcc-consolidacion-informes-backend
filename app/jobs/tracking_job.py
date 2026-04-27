@@ -258,14 +258,16 @@ async def _generate_daily_report(
     cycle_label: str,
     cycle_ts: datetime,
     cycle_started_at: datetime | None,
-) -> bool:
+) -> "Path | None":
+    """Genera archivos Excel+PDF del ciclo. Retorna ruta del PDF o None si no hay datos."""
+    from pathlib import Path as _Path
     report_date = cycle_ts.date()
     rows = await _collect_daily_rows(session, cycle_ts, cycle_started_at)
     logger.info("job_daily_cycle_rows", count=len(rows))
 
     if not rows:
         logger.info("job_daily_cycle_no_rows", cycle=cycle_label)
-        return False
+        return None
 
     ts_str = report_date.strftime("%Y-%m-%d")
     base_name = f"reporte_tcc_diario_{ts_str}_{cycle_label}"
@@ -276,57 +278,27 @@ async def _generate_daily_report(
     _pdf_svc.generate_daily(rows, pdf_path, cycle_label, report_date, utcnow())
     logger.info("job_daily_cycle_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
 
-    daily_files = [
-        await _save_report_file(
-            session,
-            report_type="daily",
-            fmt="xlsx",
-            filename=xlsx_path.name,
-            file_path=str(xlsx_path),
-            cycle_label=cycle_label,
-        ),
-        await _save_report_file(
-            session,
-            report_type="daily",
-            fmt="pdf",
-            filename=pdf_path.name,
-            file_path=str(pdf_path),
-            cycle_label=cycle_label,
-        ),
-    ]
+    await _save_report_file(session, report_type="daily", fmt="xlsx",
+                            filename=xlsx_path.name, file_path=str(xlsx_path), cycle_label=cycle_label)
+    await _save_report_file(session, report_type="daily", fmt="pdf",
+                            filename=pdf_path.name, file_path=str(pdf_path), cycle_label=cycle_label)
 
-    subject = "Seguimiento TCC"
-    html = body_daily_report(report_date.strftime("%d/%m/%Y"), cycle_label)
-    sent = await send_email(
-        to=DAILY_RECIPIENTS,
-        subject=subject,
-        body_html=html,
-        attachments=[pdf_path],
-    )
-
-    if sent:
-        now = utcnow()
-        for report_file in daily_files:
-            report_file.email_sent = True
-            report_file.email_sent_at = now
-
-    logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
-    return True
+    return pdf_path
 
 
-async def job_daily_report_only(cycle_label: str, cycle_started_at: datetime | None = None) -> bool:
-    """Genera el reporte diario desde el estado actual de BD, sin consultar TCC."""
+async def job_daily_report_only(cycle_label: str, cycle_started_at: datetime | None = None) -> "Path | None":
+    """Genera el reporte diario sin consultar TCC ni enviar email. Retorna ruta del PDF."""
     cycle_ts = _bogota_now()
     async with AsyncSessionLocal() as session:
         try:
-            generated = await _generate_daily_report(
+            pdf_path = await _generate_daily_report(
                 session,
                 cycle_label=cycle_label,
                 cycle_ts=cycle_ts,
                 cycle_started_at=cycle_started_at,
             )
             await session.commit()
-            return generated
+            return pdf_path
         except Exception:
             logger.exception("job_daily_report_only_error", cycle=cycle_label)
             await session.rollback()
@@ -350,14 +322,19 @@ async def job_daily_cycle(cycle_label: str) -> None:
             run = await tracking_svc.run_full(run_type=f"scheduled_{cycle_label}")
             await session.commit()
             logger.info("job_daily_cycle_tracking_done", run_id=run.id, status=run.status)
-            generated = await _generate_daily_report(
+            pdf_path = await _generate_daily_report(
                 session,
                 cycle_label=cycle_label,
                 cycle_ts=cycle_ts,
                 cycle_started_at=run.started_at,
             )
+            if pdf_path:
+                html = body_daily_report(cycle_ts.strftime("%d/%m/%Y"), cycle_label)
+                sent = await send_email(to=DAILY_RECIPIENTS, subject="Seguimiento TCC",
+                                        body_html=html, attachments=[pdf_path])
+                logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
             await session.commit()
-            logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=generated)
+            logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=pdf_path is not None)
             return
 
             # 2. Recolecta datos del ciclo (incluye las recién entregadas)
@@ -442,7 +419,7 @@ async def job_weekly_report() -> None:
     async with AsyncSessionLocal() as session:
         try:
             report_svc = ReportService(session)
-            rollup = await report_svc.generate_weekly_rollup(reference=last_monday)
+            rollup = await report_svc.generate_weekly_rollup(reference=week_start)
             await session.commit()
             logger.info("job_weekly_rollup_created", id=rollup.id, week_start=week_start_str)
 
@@ -457,47 +434,88 @@ async def job_weekly_report() -> None:
             _pdf_svc.generate_weekly(rows, week_start, week_end, pdf_path, utcnow())
             logger.info("job_weekly_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
 
-            weekly_files = [
-                await _save_report_file(
-                    session,
-                    report_type="weekly",
-                    fmt="xlsx",
-                    filename=xlsx_path.name,
-                    file_path=str(xlsx_path),
-                    week_start=week_start,
-                    week_end=week_end,
-                ),
-                await _save_report_file(
-                    session,
-                    report_type="weekly",
-                    fmt="pdf",
-                    filename=pdf_path.name,
-                    file_path=str(pdf_path),
-                    week_start=week_start,
-                    week_end=week_end,
-                ),
-            ]
+            await _save_report_file(session, report_type="weekly", fmt="xlsx",
+                                    filename=xlsx_path.name, file_path=str(xlsx_path),
+                                    week_start=week_start, week_end=week_end)
+            await _save_report_file(session, report_type="weekly", fmt="pdf",
+                                    filename=pdf_path.name, file_path=str(pdf_path),
+                                    week_start=week_start, week_end=week_end)
 
-            subject = "Seguimiento TCC"
             html = body_weekly_report(week_start_str, week_end_str)
-            sent = await send_email(
-                to=WEEKLY_RECIPIENTS,
-                subject=subject,
-                body_html=html,
-                attachments=[pdf_path],
-            )
-
-            if sent:
-                now = utcnow()
-                for report_file in weekly_files:
-                    report_file.email_sent = True
-                    report_file.email_sent_at = now
+            sent = await send_email(to=WEEKLY_RECIPIENTS, subject="Seguimiento TCC",
+                                    body_html=html, attachments=[pdf_path])
 
             await session.commit()
-            logger.info("job_weekly_report_done", email_sent=sent, week_start=week_start_str)
+            logger.info("job_weekly_report_done", email_sent=sent, week_start=week_start_str,
+                        pdf=str(pdf_path))
 
         except Exception:
             logger.exception("job_weekly_report_error")
+            await session.rollback()
+            raise
+
+
+# ── Jobs para GitHub Actions (sin envío de email) ────────────────────────────
+
+async def job_weekly_report_pdf() -> "tuple[Path, str, str] | None":
+    """Genera el PDF semanal sin enviar email. Retorna (pdf_path, week_start_str, week_end_str)."""
+    now = _bogota_now()
+    week_start = now.date() - timedelta(days=7)
+    week_end = now.date()
+    week_start_str = week_start.strftime("%Y-%m-%d")
+    week_end_str = week_end.strftime("%Y-%m-%d")
+
+    async with AsyncSessionLocal() as session:
+        try:
+            report_svc = ReportService(session)
+            await report_svc.generate_weekly_rollup(reference=week_start)
+            await session.commit()
+
+            rows = await _collect_weekly_rows(session, week_start, week_end)
+            if not rows:
+                return None
+
+            base_name = f"reporte_tcc_semanal_{week_start_str}_al_{week_end_str}"
+            pdf_path = settings.reports_weekly_path / f"{base_name}.pdf"
+            xlsx_path = settings.reports_weekly_path / f"{base_name}.xlsx"
+            _excel_svc.generate_weekly(rows, week_start, week_end, xlsx_path)
+            _pdf_svc.generate_weekly(rows, week_start, week_end, pdf_path, utcnow())
+
+            await _save_report_file(session, report_type="weekly", fmt="pdf",
+                                    filename=pdf_path.name, file_path=str(pdf_path),
+                                    week_start=week_start, week_end=week_end)
+            await session.commit()
+            logger.info("job_weekly_report_pdf_done", pdf=str(pdf_path))
+            return pdf_path, week_start_str, week_end_str
+        except Exception:
+            logger.exception("job_weekly_report_pdf_error")
+            await session.rollback()
+            raise
+
+
+async def job_check_alerts_data() -> list[dict]:
+    """Detecta alertas 72h, las registra en BD y retorna info para envío externo."""
+    async with AsyncSessionLocal() as session:
+        try:
+            alert_svc = AlertService(session)
+            new_alerts = await alert_svc.check_all()
+            await session.commit()
+
+            if not new_alerts:
+                return []
+
+            stale = await alert_svc.get_shipments_without_movement()
+            return [
+                {
+                    "tracking_number": s.tracking_number,
+                    "advisor_name": s.advisor_name,
+                    "current_status": s.current_status,
+                    "hours": f"{hours_since(s.current_status_at or s.first_seen_at):.0f}",
+                }
+                for s in stale
+            ]
+        except Exception:
+            logger.exception("job_check_alerts_data_error")
             await session.rollback()
             raise
 
