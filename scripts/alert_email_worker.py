@@ -77,26 +77,34 @@ async def main() -> None:
     if not alerts:
         return
 
-    if not smtp_user or not smtp_password:
-        logger.warning("alert_worker_smtp_not_configured")
-        return
+    # ── NO CRÍTICO: email — nunca debe tumbar el job ────────────────────────
+    try:
+        if not smtp_user or not smtp_password:
+            logger.warning("alert_worker_smtp_not_configured")
+            return
 
-    html = _alert_body_html(alerts)
-    msg = MIMEMultipart()
-    msg["Subject"] = "Seguimiento TCC"
-    msg["From"] = smtp_user
-    msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText(html, "html", "utf-8"))
+        html = _alert_body_html(alerts)
+        msg = MIMEMultipart()
+        msg["Subject"] = "Seguimiento TCC"
+        msg["From"] = smtp_user
+        msg["To"] = ", ".join(recipients)
+        msg.attach(MIMEText(html, "html", "utf-8"))
 
-    context = ssl.create_default_context()
-    with smtplib.SMTP(smtp_host, smtp_port) as smtp:
-        smtp.ehlo()
-        smtp.starttls(context=context)
-        smtp.login(smtp_user, smtp_password)
-        smtp.sendmail(smtp_user, recipients, msg.as_bytes())
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port) as smtp:
+            smtp.ehlo()
+            smtp.starttls(context=context)
+            smtp.login(smtp_user, smtp_password)
+            smtp.sendmail(smtp_user, recipients, msg.as_bytes())
 
-    logger.info("alert_worker_email_sent", alerts=len(alerts), recipients=recipients, host=smtp_host)
+        logger.info("alert_worker_email_sent", alerts=len(alerts), recipients=recipients, host=smtp_host)
+    except Exception as exc:
+        logger.error(f"alert_worker_email_error (no critico): {exc}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as exc:
+        logger.error(f"alert_worker_fatal_error: {exc}")
+        raise SystemExit(0)  # exit 0 — alertas no son criticas

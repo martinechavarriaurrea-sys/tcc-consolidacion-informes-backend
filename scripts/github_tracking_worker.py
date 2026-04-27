@@ -179,29 +179,32 @@ async def run_daily(cycle_label: str) -> None:
             headers={"Authorization": f"Bearer {cron_token}"},
             json=payload,
         )
+        # ── CRÍTICO: ingest de datos — si falla, el job falla ──────────────────
         response.raise_for_status()
         data = response.json()
         logger.info("github_worker_ingest_done", jobs=data.get("jobs"), checked=data.get("checked"))
 
-        # Enviar email diario con PDF generado por Vercel
-        pdf_b64 = data.get("pdf_b64")
-        pdf_filename = data.get("pdf_filename") or f"reporte_tcc_diario_{cycle_label}.pdf"
-        if pdf_b64:
-            report_date = datetime.utcnow().strftime("%d/%m/%Y")
-            body = _daily_body_html(report_date, cycle_label)
-            sent = _send_smtp_email(base64.b64decode(pdf_b64), pdf_filename, "Seguimiento TCC", body)
-            logger.info("github_worker_daily_email", sent=sent, cycle=cycle_label)
-        else:
-            logger.warning("github_worker_no_pdf", cycle=cycle_label)
+        # ── NO CRÍTICO: email — nunca debe tumbar el job ────────────────────
+        try:
+            pdf_b64 = data.get("pdf_b64")
+            pdf_filename = data.get("pdf_filename") or f"reporte_tcc_diario_{cycle_label}.pdf"
+            if pdf_b64:
+                report_date = datetime.utcnow().strftime("%d/%m/%Y")
+                body = _daily_body_html(report_date, cycle_label)
+                sent = _send_smtp_email(base64.b64decode(pdf_b64), pdf_filename, "Seguimiento TCC", body)
+                logger.info("github_worker_daily_email", sent=sent, cycle=cycle_label)
+            else:
+                logger.warning("github_worker_no_pdf", cycle=cycle_label)
 
-        # Enviar email semanal si es lunes y Vercel generó el consolidado
-        weekly_pdf_b64 = data.get("weekly_pdf_b64")
-        if weekly_pdf_b64:
-            weekly_filename = data.get("weekly_pdf_filename") or "reporte_tcc_semanal.pdf"
-            weekly_period = data.get("weekly_period", "")
-            body = _weekly_body_html(weekly_period)
-            sent = _send_smtp_email(base64.b64decode(weekly_pdf_b64), weekly_filename, "Seguimiento TCC", body)
-            logger.info("github_worker_weekly_email", sent=sent)
+            weekly_pdf_b64 = data.get("weekly_pdf_b64")
+            if weekly_pdf_b64:
+                weekly_filename = data.get("weekly_pdf_filename") or "reporte_tcc_semanal.pdf"
+                weekly_period = data.get("weekly_period", "")
+                body = _weekly_body_html(weekly_period)
+                sent = _send_smtp_email(base64.b64decode(weekly_pdf_b64), weekly_filename, "Seguimiento TCC", body)
+                logger.info("github_worker_weekly_email", sent=sent)
+        except Exception as exc:
+            logger.error(f"github_worker_email_error (no critico): {exc}")
 
 
 async def main() -> None:
