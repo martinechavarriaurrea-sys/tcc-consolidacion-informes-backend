@@ -13,6 +13,10 @@ No se lanza excepción hacia el llamador para no interrumpir el ciclo de reporte
 """
 
 import asyncio
+import json
+import os
+import subprocess
+import tempfile
 from email import encoders as email_encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -20,13 +24,6 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 import aiosmtplib
-from tenacity import (
-    RetryError,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -89,6 +86,85 @@ def _build_message(
     return msg
 
 
+def _smtp_is_configured() -> bool:
+    return bool(settings.smtp_user and settings.smtp_password)
+
+
+def _outlook_desktop_available() -> bool:
+    return os.name == "nt"
+
+
+def _send_via_outlook_sync(
+    to: list[tuple[str, str]],
+    subject: str,
+    body_html: str,
+    attachments: list[Path] | None = None,
+) -> None:
+    recipients = [email for _, email in to]
+    payload = {
+        "to": recipients,
+        "subject": subject,
+        "body_html": body_html,
+        "attachments": [str(path) for path in (attachments or []) if path.exists()],
+    }
+
+    payload_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    script_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ps1")
+    try:
+        with open(payload_file.name, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+
+        script = r"""
+param([string]$PayloadPath)
+$payload = Get-Content -Raw -LiteralPath $PayloadPath | ConvertFrom-Json
+$outlook = New-Object -ComObject Outlook.Application
+$mail = $outlook.CreateItem(0)
+$mail.To = ($payload.to -join '; ')
+$mail.Subject = $payload.subject
+$mail.HTMLBody = $payload.body_html
+foreach ($attachment in $payload.attachments) {
+    if (Test-Path -LiteralPath $attachment) {
+        $null = $mail.Attachments.Add($attachment)
+    }
+}
+$mail.Send()
+"""
+        with open(script_file.name, "w", encoding="utf-8") as fh:
+            fh.write(script)
+
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_file.name,
+                payload_file.name,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Outlook send failed")
+    finally:
+        for temp_path in (payload_file.name, script_file.name):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
+async def _send_via_outlook(
+    to: list[tuple[str, str]],
+    subject: str,
+    body_html: str,
+    attachments: list[Path] | None = None,
+) -> None:
+    await asyncio.to_thread(_send_via_outlook_sync, to, subject, body_html, attachments)
+
+
 # ── Envío con reintentos ──────────────────────────────────────────────────────
 
 async def _send_raw(msg: MIMEMultipart, subject: str) -> None:
@@ -124,6 +200,33 @@ async def send_email(
 
     recipient_list = [e for _, e in to]
     logger.info("email_attempt", subject=subject, recipients=recipient_list)
+
+    if not _smtp_is_configured():
+        if not _outlook_desktop_available():
+            logger.error("email_not_configured", subject=subject, recipients=recipient_list)
+            return False
+
+        try:
+            await _send_via_outlook(to, subject, body_html, attachments)
+            logger.info(
+                "email_sent",
+                subject=subject,
+                recipients=recipient_list,
+                attempt=1,
+                attachments=[p.name for p in (attachments or [])],
+                provider="outlook_desktop",
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                "email_send_failed_final",
+                subject=subject,
+                recipients=recipient_list,
+                attempts=1,
+                provider="outlook_desktop",
+                error=str(exc),
+            )
+            return False
 
     msg = _build_message(to, subject, body_html, attachments)
 

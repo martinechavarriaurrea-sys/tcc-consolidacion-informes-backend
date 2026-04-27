@@ -11,3 +11,8 @@ reports/
 
 .vercel
 .env*.local
+logs/
+*.db
+*.db-*
+tcc.db
+tcc.db.bak_*

@@ -101,13 +101,22 @@ async def _save_report_file(
     return rf
 
 
-async def _collect_daily_rows(session: AsyncSession, cycle_ts: datetime) -> list[DailyReportRow]:
+async def _collect_daily_rows(
+    session: AsyncSession,
+    cycle_ts: datetime,
+    cycle_started_at: datetime | None = None,
+) -> list[DailyReportRow]:
     """
     Recolecta filas para el reporte diario:
     - Guías activas en este momento
     - Guías entregadas HOY (delivered_at >= medianoche UTC)
     """
-    today_midnight = cycle_ts.replace(hour=0, minute=0, second=0, microsecond=0)
+    cycle_window_start = cycle_started_at or cycle_ts.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
     cycle_date = cycle_ts.date()
     cycle_time_str = cycle_ts.strftime("%H:%M")
 
@@ -121,7 +130,8 @@ async def _collect_daily_rows(session: AsyncSession, cycle_ts: datetime) -> list
     delivered_today_result = await session.execute(
         select(Shipment).where(
             Shipment.is_active == False,  # noqa: E712
-            Shipment.delivered_at >= today_midnight,
+            Shipment.delivered_at.is_not(None),
+            Shipment.updated_at >= cycle_window_start,
         )
     )
     delivered_today = list(delivered_today_result.scalars().all())
@@ -262,7 +272,7 @@ async def job_daily_cycle(cycle_label: str) -> None:
             logger.info("job_daily_cycle_tracking_done", run_id=run.id, status=run.status)
 
             # 2. Recolecta datos del ciclo (incluye las recién entregadas)
-            rows = await _collect_daily_rows(session, cycle_ts)
+            rows = await _collect_daily_rows(session, cycle_ts, run.started_at)
             logger.info("job_daily_cycle_rows", count=len(rows))
 
             if not rows:
@@ -280,22 +290,24 @@ async def job_daily_cycle(cycle_label: str) -> None:
             logger.info("job_daily_cycle_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
 
             # 4. Registra archivos en BD
-            await _save_report_file(
-                session,
-                report_type="daily",
-                fmt="xlsx",
-                filename=xlsx_path.name,
-                file_path=str(xlsx_path),
-                cycle_label=cycle_label,
-            )
-            await _save_report_file(
-                session,
-                report_type="daily",
-                fmt="pdf",
-                filename=pdf_path.name,
-                file_path=str(pdf_path),
-                cycle_label=cycle_label,
-            )
+            daily_files = [
+                await _save_report_file(
+                    session,
+                    report_type="daily",
+                    fmt="xlsx",
+                    filename=xlsx_path.name,
+                    file_path=str(xlsx_path),
+                    cycle_label=cycle_label,
+                ),
+                await _save_report_file(
+                    session,
+                    report_type="daily",
+                    fmt="pdf",
+                    filename=pdf_path.name,
+                    file_path=str(pdf_path),
+                    cycle_label=cycle_label,
+                ),
+            ]
 
             # 5. Envía correo
             subject = f"Reporte TCC Diario — {report_date.strftime('%Y-%m-%d')} {cycle_label[:2]}:{cycle_label[2:]}"
@@ -310,13 +322,9 @@ async def job_daily_cycle(cycle_label: str) -> None:
             # 6. Actualiza estado de envío en BD
             if sent:
                 now = utcnow()
-                await session.execute(
-                    select(ReportFile).where(
-                        ReportFile.cycle_label == cycle_label,
-                        ReportFile.report_type == "daily",
-                        ReportFile.email_sent == False,  # noqa: E712
-                    )
-                )
+                for report_file in daily_files:
+                    report_file.email_sent = True
+                    report_file.email_sent_at = now
             await session.commit()
             logger.info("job_daily_cycle_done", cycle=cycle_label, email_sent=sent)
 
@@ -360,24 +368,26 @@ async def job_weekly_report() -> None:
             _pdf_svc.generate_weekly(rows, week_start, week_end, pdf_path, utcnow())
             logger.info("job_weekly_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
 
-            await _save_report_file(
-                session,
-                report_type="weekly",
-                fmt="xlsx",
-                filename=xlsx_path.name,
-                file_path=str(xlsx_path),
-                week_start=week_start,
-                week_end=week_end,
-            )
-            await _save_report_file(
-                session,
-                report_type="weekly",
-                fmt="pdf",
-                filename=pdf_path.name,
-                file_path=str(pdf_path),
-                week_start=week_start,
-                week_end=week_end,
-            )
+            weekly_files = [
+                await _save_report_file(
+                    session,
+                    report_type="weekly",
+                    fmt="xlsx",
+                    filename=xlsx_path.name,
+                    file_path=str(xlsx_path),
+                    week_start=week_start,
+                    week_end=week_end,
+                ),
+                await _save_report_file(
+                    session,
+                    report_type="weekly",
+                    fmt="pdf",
+                    filename=pdf_path.name,
+                    file_path=str(pdf_path),
+                    week_start=week_start,
+                    week_end=week_end,
+                ),
+            ]
 
             subject = f"Reporte TCC Semanal — {week_start_str} al {week_end_str}"
             html = body_weekly_report(week_start_str, week_end_str)
@@ -387,6 +397,12 @@ async def job_weekly_report() -> None:
                 body_html=html,
                 attachments=[xlsx_path, pdf_path],
             )
+
+            if sent:
+                now = utcnow()
+                for report_file in weekly_files:
+                    report_file.email_sent = True
+                    report_file.email_sent_at = now
 
             await session.commit()
             logger.info("job_weekly_report_done", email_sent=sent, week_start=week_start_str)

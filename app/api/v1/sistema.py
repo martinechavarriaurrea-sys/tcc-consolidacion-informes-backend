@@ -1,5 +1,6 @@
+import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter
 from sqlalchemy import func, select, text
@@ -20,7 +21,11 @@ async def system_health():
     bd_conectada = False
     total_guias = 0
     ultima_consulta_tcc = None
-    scheduler_activo = True
+    running_on_vercel = bool(os.getenv("VERCEL"))
+    scheduler_mode = "external" if running_on_vercel else ("disabled" if settings.disable_scheduler else "embedded")
+    scheduler_activo = False
+    email_configured = bool(settings.smtp_user and settings.smtp_password)
+    cron_protected = bool(settings.cron_secret)
 
     try:
         async with AsyncSessionLocal() as session:
@@ -37,6 +42,7 @@ async def system_health():
             ).scalar_one_or_none()
             if last_run and last_run.finished_at:
                 ultima_consulta_tcc = last_run.finished_at.isoformat()
+                scheduler_activo = last_run.finished_at >= datetime.now(timezone.utc) - timedelta(hours=20)
     except Exception:
         bd_conectada = False
 
@@ -49,6 +55,9 @@ async def system_health():
         "uptime_seconds": uptime,
         "ultima_consulta_tcc": ultima_consulta_tcc,
         "scheduler_activo": scheduler_activo,
+        "scheduler_mode": scheduler_mode,
+        "email_configured": email_configured,
+        "cron_protected": cron_protected,
         "total_guias_bd": total_guias,
         "bd_conectada": bd_conectada,
         "mensaje": "Sistema operando normalmente" if overall == "ok" else "Sin conexión a base de datos",

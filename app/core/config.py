@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Alertas: cada N minutos
     alert_check_interval_minutes: int = 30
     cron_secret: str = ""
+    github_oidc_repository: str = "martinechavarriaurrea-sys/tcc-consolidacion-informes-backend"
+    github_oidc_audience: str = "tcc-consolidacion-informes-backend"
+    github_oidc_ref: str = "refs/heads/main"
 
     # Alertas
     alert_no_movement_hours: int = 72

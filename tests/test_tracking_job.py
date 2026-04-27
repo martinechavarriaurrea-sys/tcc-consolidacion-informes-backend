@@ -4,15 +4,13 @@ Se mockean las dependencias externas (TCC, SMTP, BD).
 Se verifica la lógica orquestadora sin acceso real a red ni BD.
 """
 
-import tempfile
 from datetime import date, datetime, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.excel_service import DailyReportRow, WeeklyReportRow
 from app.jobs.tracking_job import _collect_daily_rows, _bogota_now
+from app.models.shipment import Shipment
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -55,7 +53,8 @@ async def test_collect_daily_rows_active_shipment():
     session.execute = AsyncMock(side_effect=[active_result, delivered_result])
 
     now = datetime(2026, 4, 22, 7, 0, tzinfo=timezone.utc)
-    rows = await _collect_daily_rows(session, now)
+    cycle_started_at = datetime(2026, 4, 22, 6, 50, tzinfo=timezone.utc)
+    rows = await _collect_daily_rows(session, now, cycle_started_at)
 
     assert len(rows) == 1
     assert rows[0].tracking_number == "TCC-001"
@@ -88,6 +87,31 @@ async def test_collect_daily_rows_delivered_this_cycle():
     assert len(rows) == 1
     assert rows[0].is_delivered is True
     assert rows[0].tracking_number == "TCC-DELIVERED"
+
+
+@pytest.mark.asyncio
+async def test_collect_daily_rows_excludes_delivery_from_previous_cycle(session):
+    """Una guÃ­a entregada en el ciclo anterior no reaparece en el siguiente reporte."""
+    shipment = Shipment(
+        tracking_number="TCC-PREVIOUS",
+        advisor_name="Asesor Test",
+        client_name="Cliente Test",
+        current_status="entregado",
+        current_status_raw="ENTREGADA",
+        current_status_at=datetime(2026, 4, 22, 7, 0),
+        first_seen_at=datetime(2026, 4, 21, 8, 0),
+        delivered_at=datetime(2026, 4, 22, 7, 0),
+        updated_at=datetime(2026, 4, 22, 7, 1),
+        is_active=False,
+    )
+    session.add(shipment)
+    await session.flush()
+
+    now = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)
+    cycle_started_at = datetime(2026, 4, 22, 11, 59, tzinfo=timezone.utc)
+    rows = await _collect_daily_rows(session, now, cycle_started_at)
+
+    assert rows == []
 
 
 @pytest.mark.asyncio

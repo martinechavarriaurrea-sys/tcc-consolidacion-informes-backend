@@ -1,50 +1,141 @@
-name: TCC scheduled tracking
+name: TCC Scheduler
 
 on:
   schedule:
-    # Colombia time (America/Bogota, UTC-5):
-    # 07:00, 12:00, 16:00 -> 12:00, 17:00, 21:00 UTC.
-    - cron: "0 12 * * *"
-    - cron: "0 17 * * *"
-    - cron: "0 21 * * *"
+    # America/Bogota is UTC-5 year round.
+    - cron: "0 12 * * *"      # 07:00 Bogota
+    - cron: "0 17 * * *"      # 12:00 Bogota
+    - cron: "0 21 * * *"      # 16:00 Bogota
+    - cron: "0 11 * * 1"      # cleanup, Monday 06:00 Bogota
+    - cron: "*/30 * * * *"    # alerts every 30 minutes
   workflow_dispatch:
     inputs:
-      cycle:
-        description: "Cycle to run"
+      job:
+        description: "Job to run"
         required: true
-        default: "1200"
+        default: "daily"
+        type: choice
+        options:
+          - daily
+          - weekly
+          - alerts
+          - cleanup
+      cycle:
+        description: "Daily cycle"
+        required: false
+        default: "0700"
         type: choice
         options:
           - "0700"
           - "1200"
           - "1600"
 
+concurrency:
+  group: tcc-scheduler
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   dispatch:
-    name: Dispatch tracking cycle
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 20
+    env:
+      BACKEND_URL: https://tcc-consolidacion-informes-backend.vercel.app
+      OIDC_AUDIENCE: tcc-consolidacion-informes-backend
     steps:
-      - name: Resolve cycle
-        id: cycle
+      - name: Resolve scheduled job
+        id: target
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            cycle="${{ inputs.cycle }}"
-          else
-            case "${{ github.event.schedule }}" in
-              "0 12 * * *") cycle="0700" ;;
-              "0 17 * * *") cycle="1200" ;;
-              "0 21 * * *") cycle="1600" ;;
-              *) echo "Unknown schedule: ${{ github.event.schedule }}" >&2; exit 1 ;;
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.job }}" in
+              daily)
+                echo "path=/api/cron/daily-dispatch?cycle=${{ inputs.cycle }}" >> "$GITHUB_OUTPUT"
+                ;;
+              weekly)
+                echo "path=/api/cron/weekly" >> "$GITHUB_OUTPUT"
+                ;;
+              alerts)
+                echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
+                ;;
+              cleanup)
+                echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
+                ;;
             esac
+            exit 0
           fi
 
-          echo "cycle=$cycle" >> "$GITHUB_OUTPUT"
+          case "${{ github.event.schedule }}" in
+            "0 12 * * *")
+              echo "path=/api/cron/daily-dispatch?cycle=0700" >> "$GITHUB_OUTPUT"
+              ;;
+            "0 17 * * *")
+              echo "path=/api/cron/daily-dispatch?cycle=1200" >> "$GITHUB_OUTPUT"
+              ;;
+            "0 21 * * *")
+              echo "path=/api/cron/daily-dispatch?cycle=1600" >> "$GITHUB_OUTPUT"
+              ;;
+            "0 11 * * 1")
+              echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
+              ;;
+            "*/30 * * * *")
+              echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported schedule: ${{ github.event.schedule }}" >&2
+              exit 1
+              ;;
+          esac
 
-      - name: Call Vercel backend
+      - name: Request GitHub OIDC token
+        id: oidc
         shell: bash
         run: |
-          url="https://tcc-consolidacion-informes-backend.vercel.app/api/cron/daily-dispatch?cycle=${{ steps.cycle.outputs.cycle }}"
-          curl --fail --show-error --silent --retry 3 --retry-delay 10 --max-time 600 "$url"
+          set -euo pipefail
+
+          token_json=$(
+            curl --silent --show-error --fail-with-body \
+              --header "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          )
+          token=$(python3 -c 'import json, sys; print(json.load(sys.stdin)["value"])' <<< "${token_json}")
+          echo "::add-mask::${token}"
+          echo "token=${token}" >> "$GITHUB_OUTPUT"
+
+      - name: Call backend cron endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="${BACKEND_URL}${{ steps.target.outputs.path }}"
+          echo "Calling ${endpoint}"
+
+          for attempt in 1 2 3; do
+            status=$(
+              curl --silent --show-error --location \
+                --max-time 900 \
+                --output response.json \
+                --write-out "%{http_code}" \
+                --header "Authorization: Bearer ${{ steps.oidc.outputs.token }}" \
+                "${endpoint}" || echo "000"
+            )
+
+            if [[ -f response.json ]]; then
+              cat response.json
+              echo
+            fi
+
+            if [[ "${status}" =~ ^2 ]]; then
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed with HTTP ${status}" >&2
+            sleep $((attempt * 20))
+          done
+
+          exit 1
