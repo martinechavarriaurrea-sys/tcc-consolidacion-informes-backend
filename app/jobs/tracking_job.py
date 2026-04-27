@@ -301,7 +301,7 @@ async def _generate_daily_report(
         to=DAILY_RECIPIENTS,
         subject=subject,
         body_html=html,
-        attachments=[xlsx_path, pdf_path],
+        attachments=[pdf_path],
     )
 
     if sent:
@@ -405,7 +405,7 @@ async def job_daily_cycle(cycle_label: str) -> None:
                 to=DAILY_RECIPIENTS,
                 subject=subject,
                 body_html=html,
-                attachments=[xlsx_path, pdf_path],
+                attachments=[pdf_path],
             )
 
             # 6. Actualiza estado de envío en BD
@@ -484,7 +484,7 @@ async def job_weekly_report() -> None:
                 to=WEEKLY_RECIPIENTS,
                 subject=subject,
                 body_html=html,
-                attachments=[xlsx_path, pdf_path],
+                attachments=[pdf_path],
             )
 
             if sent:
