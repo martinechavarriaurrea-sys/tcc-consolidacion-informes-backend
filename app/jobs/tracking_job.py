@@ -295,7 +295,7 @@ async def _generate_daily_report(
         ),
     ]
 
-    subject = f"Reporte TCC Diario - {report_date.strftime('%Y-%m-%d')} {cycle_label[:2]}:{cycle_label[2:]}"
+    subject = "Seguimiento TCC"
     html = body_daily_report(report_date.strftime("%d/%m/%Y"), cycle_label)
     sent = await send_email(
         to=DAILY_RECIPIENTS,
@@ -399,7 +399,7 @@ async def job_daily_cycle(cycle_label: str) -> None:
             ]
 
             # 5. Envía correo
-            subject = f"Reporte TCC Diario — {report_date.strftime('%Y-%m-%d')} {cycle_label[:2]}:{cycle_label[2:]}"
+            subject = "Seguimiento TCC"
             html = body_daily_report(report_date.strftime("%d/%m/%Y"), cycle_label)
             sent = await send_email(
                 to=DAILY_RECIPIENTS,
@@ -427,15 +427,15 @@ async def job_daily_cycle(cycle_label: str) -> None:
 
 async def job_weekly_report() -> None:
     """
-    Genera el consolidado de la semana ANTERIOR (lunes–domingo precedente).
-    Se ejecuta los lunes 07:00.
+    Genera el consolidado de la semana anterior (lunes a lunes).
+    Se ejecuta los lunes 07:00: cubre desde el lunes anterior hasta hoy (lunes inclusive).
     """
     logger.info("job_weekly_report_start")
     now = _bogota_now()
 
-    # Semana anterior: si hoy es lunes, last_monday = hace 7 días
-    last_monday = now.date() - timedelta(days=7)
-    week_start, week_end = week_boundaries(last_monday)
+    # Período: lunes pasado (hace 7 días) hasta hoy (lunes actual)
+    week_start = now.date() - timedelta(days=7)
+    week_end = now.date()
     week_start_str = week_start.strftime("%Y-%m-%d")
     week_end_str = week_end.strftime("%Y-%m-%d")
 
@@ -478,7 +478,7 @@ async def job_weekly_report() -> None:
                 ),
             ]
 
-            subject = f"Reporte TCC Semanal — {week_start_str} al {week_end_str}"
+            subject = "Seguimiento TCC"
             html = body_weekly_report(week_start_str, week_end_str)
             sent = await send_email(
                 to=WEEKLY_RECIPIENTS,
@@ -536,7 +536,7 @@ async def job_check_alerts() -> None:
                     for s in stale
                 ]
 
-                subject = f"Alerta TCC — {len(new_alerts)} guía(s) sin movimiento por 72+ horas"
+                subject = "Seguimiento TCC"
                 html = body_alert_72h(shipments_info)
                 sent = await send_email(
                     to=ALERT_RECIPIENTS,
