@@ -42,7 +42,7 @@ def _send_smtp_email(
 ) -> bool:
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
-    recipient = os.getenv("EMAIL_RECIPIENT", "martinechavarriaurrea@gmail.com")
+    recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
 
     if not smtp_user or not smtp_password:
         logger.warning("github_worker_smtp_not_configured")

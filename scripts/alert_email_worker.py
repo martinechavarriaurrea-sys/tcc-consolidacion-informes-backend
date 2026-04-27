@@ -61,7 +61,7 @@ async def main() -> None:
     cron_token = os.environ["CRON_TOKEN"]
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_password = os.getenv("SMTP_PASSWORD", "")
-    recipient = os.getenv("EMAIL_RECIPIENT", "martinechavarriaurrea@gmail.com")
+    recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
         resp = await client.get(

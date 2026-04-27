@@ -34,15 +34,15 @@ settings = get_settings()
 # Destinatarios fijos por tipo de reporte.
 # Fuente de verdad en código; se pueden sobrescribir desde BD (email_recipients).
 DAILY_RECIPIENTS = [
-    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
+    ("Martin Echavarria", "echavarriam@asteco.com.co"),
 ]
 
 WEEKLY_RECIPIENTS = [
-    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
+    ("Martin Echavarria", "echavarriam@asteco.com.co"),
 ]
 
 ALERT_RECIPIENTS = [
-    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
+    ("Martin Echavarria", "echavarriam@asteco.com.co"),
 ]
 
 
