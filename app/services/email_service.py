@@ -34,17 +34,15 @@ settings = get_settings()
 # Destinatarios fijos por tipo de reporte.
 # Fuente de verdad en código; se pueden sobrescribir desde BD (email_recipients).
 DAILY_RECIPIENTS = [
-    ("Angela Maria Diaz Cadavid", "adiaz@asteco.com.co"),
-    ("Bryan Villada", "bvillada@asteco.com.co"),
+    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
 ]
 
 WEEKLY_RECIPIENTS = [
-    ("Juan Camilo Muñoz", "jmunoz@asteco.com.co"),
+    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
 ]
 
 ALERT_RECIPIENTS = [
-    ("Juan Camilo Muñoz", "jmunoz@asteco.com.co"),
-    ("Bryan Villada", "bvillada@asteco.com.co"),
+    ("Martin Echavarria", "martinechavarriaurrea@gmail.com"),
 ]
 
 
@@ -105,11 +103,13 @@ def _send_via_outlook_sync(
         "to": recipients,
         "subject": subject,
         "body_html": body_html,
-        "attachments": [str(path) for path in (attachments or []) if path.exists()],
+        "attachments": [str(path.resolve()) for path in (attachments or []) if path.exists()],
     }
 
     payload_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    payload_file.close()
     script_file = tempfile.NamedTemporaryFile(delete=False, suffix=".ps1")
+    script_file.close()
     try:
         with open(payload_file.name, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False)
