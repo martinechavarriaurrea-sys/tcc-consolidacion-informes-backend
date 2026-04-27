@@ -35,14 +35,17 @@ settings = get_settings()
 # Fuente de verdad en código; se pueden sobrescribir desde BD (email_recipients).
 DAILY_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
+    ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
 ]
 
 WEEKLY_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
+    ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
 ]
 
 ALERT_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
+    ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
 ]
 
 

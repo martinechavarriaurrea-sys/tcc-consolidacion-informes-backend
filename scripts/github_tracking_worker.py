@@ -44,7 +44,7 @@ def _send_smtp_email(
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
+    recipients = [r.strip() for r in os.getenv("EMAIL_RECIPIENTS", "echavarriam@asteco.com.co,jmunoz@asteco.com.co").split(",")]
 
     if not smtp_user or not smtp_password:
         logger.warning("github_worker_smtp_not_configured")
@@ -53,7 +53,7 @@ def _send_smtp_email(
     msg = MIMEMultipart()
     msg["Subject"] = subject
     msg["From"] = smtp_user
-    msg["To"] = recipient
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(body_html, "html", "utf-8"))
 
     part = MIMEApplication(pdf_bytes, Name=pdf_filename)
@@ -65,9 +65,9 @@ def _send_smtp_email(
         smtp.ehlo()
         smtp.starttls(context=context)
         smtp.login(smtp_user, smtp_password)
-        smtp.sendmail(smtp_user, [recipient], msg.as_bytes())
+        smtp.sendmail(smtp_user, recipients, msg.as_bytes())
 
-    logger.info("github_worker_email_sent", recipient=recipient, host=smtp_host, filename=pdf_filename)
+    logger.info("github_worker_email_sent", recipients=recipients, host=smtp_host, filename=pdf_filename)
     return True
 
 

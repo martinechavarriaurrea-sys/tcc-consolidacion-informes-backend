@@ -63,7 +63,7 @@ async def main() -> None:
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    recipient = os.getenv("EMAIL_RECIPIENT", "echavarriam@asteco.com.co")
+    recipients = [r.strip() for r in os.getenv("EMAIL_RECIPIENTS", "echavarriam@asteco.com.co,jmunoz@asteco.com.co").split(",")]
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
         resp = await client.get(
@@ -87,7 +87,7 @@ async def main() -> None:
     msg = MIMEMultipart()
     msg["Subject"] = "Seguimiento TCC"
     msg["From"] = smtp_user
-    msg["To"] = recipient
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(html, "html", "utf-8"))
 
     context = ssl.create_default_context()
@@ -95,9 +95,9 @@ async def main() -> None:
         smtp.ehlo()
         smtp.starttls(context=context)
         smtp.login(smtp_user, smtp_password)
-        smtp.sendmail(smtp_user, [recipient], msg.as_bytes())
+        smtp.sendmail(smtp_user, recipients, msg.as_bytes())
 
-    logger.info("alert_worker_email_sent", alerts=len(alerts), recipient=recipient, host=smtp_host)
+    logger.info("alert_worker_email_sent", alerts=len(alerts), recipients=recipients, host=smtp_host)
 
 
 if __name__ == "__main__":
