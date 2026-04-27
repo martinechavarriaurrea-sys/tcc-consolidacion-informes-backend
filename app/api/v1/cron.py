@@ -321,3 +321,25 @@ async def cleanup_dispatch(authorization: str | None = Header(default=None)):
     await job_cleanup_old_guias()
     logger.info("cron_cleanup_dispatch_done")
     return {"status": "completed", "jobs": ["cleanup"]}
+
+
+@router.post("/apply-migration")
+async def apply_migration(authorization: str | None = Header(default=None)):
+    """Aplica migraciones de schema pendientes. Solo para uso en deploy."""
+    await _verify_cron_authorization(authorization)
+    from sqlalchemy import text
+    from app.core.database import AsyncSessionLocal
+    results = []
+    async with AsyncSessionLocal() as session:
+        for stmt, label in [
+            ("ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shipping_date DATE", "shipping_date"),
+        ]:
+            try:
+                await session.execute(text(stmt))
+                await session.commit()
+                results.append({"column": label, "status": "applied"})
+            except Exception as exc:
+                await session.rollback()
+                results.append({"column": label, "status": "skipped", "reason": str(exc)})
+    logger.info("cron_migration_done", results=results)
+    return {"status": "completed", "migrations": results}
