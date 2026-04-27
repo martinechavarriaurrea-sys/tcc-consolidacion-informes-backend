@@ -5,20 +5,17 @@ Se ejecuta desde GitHub Actions cada 30 minutos.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import smtplib
 import ssl
-import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import httpx
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app.core.logging import configure_logging, get_logger
-
-logger = get_logger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def _alert_body_html(alerts: list[dict]) -> str:
@@ -56,7 +53,6 @@ def _alert_body_html(alerts: list[dict]) -> str:
 
 
 async def main() -> None:
-    configure_logging()
     backend_url = os.environ["BACKEND_URL"].rstrip("/")
     cron_token = os.environ["CRON_TOKEN"]
     smtp_user = os.getenv("SMTP_USER", "")
@@ -70,7 +66,9 @@ async def main() -> None:
             f"{backend_url}/api/cron/alert-data",
             headers={"Authorization": f"Bearer {cron_token}"},
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            logger.warning(f"alert-data returned {resp.status_code}: {resp.text[:200]}")
+            return
         data = resp.json()
 
     alerts = data.get("new_alerts", [])

@@ -23,12 +23,14 @@ from typing import Any
 
 import httpx
 
+import logging
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.logging import configure_logging, get_logger
 from app.integrations.tcc.client import get_tcc_client
 
-logger = get_logger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT = int(os.getenv("TCC_WORKER_CONCURRENCY", "5"))
 PAGE_SIZE = 200
@@ -203,7 +205,6 @@ async def run_daily(cycle_label: str) -> None:
 
 
 async def main() -> None:
-    configure_logging()
     if len(sys.argv) != 3 or sys.argv[1] != "daily":
         raise SystemExit("Uso: python scripts/github_tracking_worker.py daily <0700|1200|1600>")
 
