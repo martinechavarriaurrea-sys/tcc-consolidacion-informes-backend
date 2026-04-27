@@ -146,11 +146,12 @@ class ExcelService:
         "Fecha Despacho",
         "Dias en Transito",
         "Última Novedad",
+        "Entregada",
         "Alerta 72h",
         "Observaciones",
     ]
 
-    _DAILY_COL_WIDTHS = [14, 12, 18, 22, 25, 18, 35, 16, 16, 22, 12, 40]
+    _DAILY_COL_WIDTHS = [14, 12, 18, 22, 25, 18, 35, 16, 16, 22, 12, 12, 40]
 
     # Columnas del reporte semanal
     _WEEKLY_HEADERS = [
@@ -219,7 +220,8 @@ class ExcelService:
                 row.shipping_date.strftime("%Y-%m-%d") if row.shipping_date else "—",
                 row.days_in_transit if row.days_in_transit is not None else "—",
                 row.last_event_at.strftime("%Y-%m-%d %H:%M") if row.last_event_at else "—",
-                "Si" if row.is_alert else "No",
+                "Sí" if row.is_delivered else "No",
+                "Sí" if row.is_alert else "No",
                 row.observations or "",
             ]
 
@@ -228,7 +230,7 @@ class ExcelService:
                 cell.font = _body_font(bold=row.is_delivered or row.is_alert)
                 cell.fill = _fill(row_bg)
                 cell.border = _thin_border()
-                cell.alignment = _center() if col_idx in (1, 2, 8, 9, 11) else _left()
+                cell.alignment = _center() if col_idx in (1, 2, 8, 9, 11, 12) else _left()
 
         _set_column_widths(ws, self._DAILY_COL_WIDTHS)
         ws.row_dimensions[header_row].height = 28

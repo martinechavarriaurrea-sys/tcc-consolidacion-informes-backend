@@ -73,7 +73,7 @@ class ReportService:
                 )
                 for row in advisor_rows
             ],
-            last_tracking_run=last_run.started_at if last_run else None,
+            last_tracking_run=last_run.finished_at if last_run else None,
             as_of=utcnow(),
         )
 

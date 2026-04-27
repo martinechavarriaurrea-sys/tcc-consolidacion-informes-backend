@@ -51,15 +51,6 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     (r"retorn", NormalizedStatus.DEVUELTO),
     (r"proceso.*devoluci[oó]n", NormalizedStatus.DEVUELTO),
     (r"cumplido.*devoluci[oó]n", NormalizedStatus.DEVUELTO),
-    # Fallido / indemnización / no despachado
-    (r"indemnizaci[oó]n", NormalizedStatus.FALLIDO),
-    (r"no.*despacha", NormalizedStatus.FALLIDO),
-    (r"intento.*fallid", NormalizedStatus.FALLIDO),
-    (r"fallid.*entrega", NormalizedStatus.FALLIDO),
-    (r"no.*encontrado", NormalizedStatus.FALLIDO),
-    (r"direcci[oó]n.*incorrecta", NormalizedStatus.FALLIDO),
-    (r"destinatario.*ausente", NormalizedStatus.FALLIDO),
-    (r"rechaz", NormalizedStatus.FALLIDO),
     # Novedad
     (r"novedad", NormalizedStatus.NOVEDAD),
     (r"cumplido.*novedad", NormalizedStatus.NOVEDAD),
@@ -71,10 +62,23 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     (r"demorad", NormalizedStatus.NOVEDAD),
     (r"da[ñn]o", NormalizedStatus.NOVEDAD),
     (r"aver[ií]", NormalizedStatus.NOVEDAD),
+    # Fallido / indemnización / no despachado
+    (r"indemnizaci[oó]n", NormalizedStatus.FALLIDO),
+    (r"no.*despacha", NormalizedStatus.FALLIDO),
+    (r"intento.*fallid", NormalizedStatus.FALLIDO),
+    (r"fallid.*entrega", NormalizedStatus.FALLIDO),
+    (r"no.*encontrado", NormalizedStatus.FALLIDO),
+    (r"direcci[oó]n.*incorrecta", NormalizedStatus.FALLIDO),
+    (r"destinatario.*ausente", NormalizedStatus.FALLIDO),
+    (r"rechaz", NormalizedStatus.FALLIDO),
     # Entregado
     (r"entregad", NormalizedStatus.ENTREGADO),
     (r"recib.*destinatario", NormalizedStatus.ENTREGADO),
     (r"reemplaz.*remesa", NormalizedStatus.ENTREGADO),
+    # Recogido
+    (r"recogid", NormalizedStatus.RECOGIDO),
+    (r"recolect", NormalizedStatus.RECOGIDO),
+    (r"recib.*remitente", NormalizedStatus.RECOGIDO),
     # En ruta (último tramo)
     (r"en.*ruta", NormalizedStatus.EN_RUTA),
     (r"proceso.*entrega", NormalizedStatus.EN_RUTA),
@@ -94,10 +98,6 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     (r"contin[uú]a.*destino", NormalizedStatus.EN_TRANSITO),
     (r"carga.*planta", NormalizedStatus.EN_TRANSITO),
     (r"recepci[oó]n.*destino", NormalizedStatus.EN_TRANSITO),
-    # Recogido
-    (r"recogid", NormalizedStatus.RECOGIDO),
-    (r"recolect", NormalizedStatus.RECOGIDO),
-    (r"recib.*remitente", NormalizedStatus.RECOGIDO),
     # Registrado
     (r"registrad", NormalizedStatus.REGISTRADO),
     (r"ingres", NormalizedStatus.REGISTRADO),

@@ -72,7 +72,7 @@ async def main() -> None:
         data = resp.json()
 
     alerts = data.get("new_alerts", [])
-    logger.info("alert_worker_checked", count=len(alerts))
+    logger.info("alert_worker_checked count=%s", len(alerts))
 
     if not alerts:
         return
@@ -97,7 +97,12 @@ async def main() -> None:
             smtp.login(smtp_user, smtp_password)
             smtp.sendmail(smtp_user, recipients, msg.as_bytes())
 
-        logger.info("alert_worker_email_sent", alerts=len(alerts), recipients=recipients, host=smtp_host)
+        logger.info(
+            "alert_worker_email_sent alerts=%s recipients=%s host=%s",
+            len(alerts),
+            recipients,
+            smtp_host,
+        )
     except Exception as exc:
         logger.error(f"alert_worker_email_error (no critico): {exc}")
 

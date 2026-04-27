@@ -61,12 +61,22 @@ def test_build_message_missing_attachment_skipped(caplog):
 @pytest.mark.asyncio
 async def test_send_email_success():
     with patch("app.services.email_service._send_raw", new_callable=AsyncMock) as mock_send:
-        mock_send.return_value = None
-        result = await send_email(
-            to=[("Test", "test@example.com")],
-            subject="Test",
-            body_html="<p>Test</p>",
-        )
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_send.return_value = None
+            mock_settings.email_max_retries = 1
+            mock_settings.email_retry_delay = 0.01
+            mock_settings.smtp_host = "smtp.test"
+            mock_settings.smtp_port = 587
+            mock_settings.smtp_user = "u"
+            mock_settings.smtp_password = "p"
+            mock_settings.smtp_use_tls = False
+            mock_settings.email_from_name = "Test"
+            mock_settings.email_from_address = "noreply@test.com"
+            result = await send_email(
+                to=[("Test", "test@example.com")],
+                subject="Test",
+                body_html="<p>Test</p>",
+            )
     assert result is True
     mock_send.assert_called_once()
 

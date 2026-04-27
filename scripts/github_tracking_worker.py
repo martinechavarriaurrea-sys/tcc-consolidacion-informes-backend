@@ -69,7 +69,12 @@ def _send_smtp_email(
         smtp.login(smtp_user, smtp_password)
         smtp.sendmail(smtp_user, recipients, msg.as_bytes())
 
-    logger.info("github_worker_email_sent", recipients=recipients, host=smtp_host, filename=pdf_filename)
+    logger.info(
+        "github_worker_email_sent recipients=%s host=%s filename=%s",
+        recipients,
+        smtp_host,
+        pdf_filename,
+    )
     return True
 
 
@@ -146,7 +151,7 @@ async def _fetch_tcc_results(tracking_numbers: list[str]) -> list[dict[str, Any]
                 result = await provider.fetch(tracking_number)
                 return _jsonable(result)
             except Exception as exc:
-                logger.exception("github_worker_fetch_error", tracking=tracking_number)
+                logger.exception("github_worker_fetch_error tracking=%s", tracking_number)
                 return {
                     "tracking_number": tracking_number,
                     "fetch_success": False,
@@ -165,7 +170,11 @@ async def run_daily(cycle_label: str) -> None:
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(900.0)) as client:
         tracking_numbers = await _fetch_active_tracking_numbers(client, backend_url)
-        logger.info("github_worker_shipments_loaded", count=len(tracking_numbers), cycle=cycle_label)
+        logger.info(
+            "github_worker_shipments_loaded count=%s cycle=%s",
+            len(tracking_numbers),
+            cycle_label,
+        )
 
         results = await _fetch_tcc_results(tracking_numbers)
         payload = {
@@ -182,7 +191,11 @@ async def run_daily(cycle_label: str) -> None:
         # ── CRÍTICO: ingest de datos — si falla, el job falla ──────────────────
         response.raise_for_status()
         data = response.json()
-        logger.info("github_worker_ingest_done", jobs=data.get("jobs"), checked=data.get("checked"))
+        logger.info(
+            "github_worker_ingest_done jobs=%s checked=%s",
+            data.get("jobs"),
+            data.get("checked"),
+        )
 
         # ── NO CRÍTICO: email — nunca debe tumbar el job ────────────────────
         try:
@@ -192,9 +205,9 @@ async def run_daily(cycle_label: str) -> None:
                 report_date = datetime.utcnow().strftime("%d/%m/%Y")
                 body = _daily_body_html(report_date, cycle_label)
                 sent = _send_smtp_email(base64.b64decode(pdf_b64), pdf_filename, "Seguimiento TCC", body)
-                logger.info("github_worker_daily_email", sent=sent, cycle=cycle_label)
+                logger.info("github_worker_daily_email sent=%s cycle=%s", sent, cycle_label)
             else:
-                logger.warning("github_worker_no_pdf", cycle=cycle_label)
+                logger.warning("github_worker_no_pdf cycle=%s", cycle_label)
 
             weekly_pdf_b64 = data.get("weekly_pdf_b64")
             if weekly_pdf_b64:
@@ -202,7 +215,7 @@ async def run_daily(cycle_label: str) -> None:
                 weekly_period = data.get("weekly_period", "")
                 body = _weekly_body_html(weekly_period)
                 sent = _send_smtp_email(base64.b64decode(weekly_pdf_b64), weekly_filename, "Seguimiento TCC", body)
-                logger.info("github_worker_weekly_email", sent=sent)
+                logger.info("github_worker_weekly_email sent=%s", sent)
         except Exception as exc:
             logger.error(f"github_worker_email_error (no critico): {exc}")
 

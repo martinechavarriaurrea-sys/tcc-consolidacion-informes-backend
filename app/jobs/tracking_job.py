@@ -159,10 +159,13 @@ async def _collect_daily_rows(
 
         # Dias en transito desde fecha de despacho (sin contar domingos)
         days_in_transit = None
-        if shipment.shipping_date:
-            end = (shipment.delivered_at.date() if shipment.delivered_at
-                   else cycle_date)
-            days_in_transit = count_days_excluding_sundays(shipment.shipping_date, end)
+        shipping_date = shipment.shipping_date
+        if isinstance(shipping_date, datetime):
+            shipping_date = shipping_date.date()
+        if isinstance(shipping_date, date):
+            delivered_at = shipment.delivered_at
+            end = delivered_at.date() if isinstance(delivered_at, datetime) else cycle_date
+            days_in_transit = count_days_excluding_sundays(shipping_date, end)
 
         rows.append(DailyReportRow(
             query_date=cycle_date,
@@ -178,7 +181,7 @@ async def _collect_daily_rows(
             is_delivered=not shipment.is_active and bool(shipment.delivered_at),
             is_alert=is_alert,
             observations="; ".join(obs_parts),
-            shipping_date=shipment.shipping_date,
+            shipping_date=shipping_date if isinstance(shipping_date, date) else None,
             days_in_transit=days_in_transit,
         ))
 
@@ -344,64 +347,8 @@ async def job_daily_cycle(cycle_label: str) -> None:
                 logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
             await session.commit()
             logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=pdf_path is not None)
+            # _generate_daily_report already handles rows, files, DB registration, and email.
             return
-
-            # 2. Recolecta datos del ciclo (incluye las recién entregadas)
-            rows = await _collect_daily_rows(session, cycle_ts, run.started_at)
-            logger.info("job_daily_cycle_rows", count=len(rows))
-
-            if not rows:
-                logger.info("job_daily_cycle_no_rows", cycle=cycle_label)
-                return
-
-            # 3. Genera archivos
-            ts_str = report_date.strftime("%Y-%m-%d")
-            base_name = f"reporte_tcc_diario_{ts_str}_{cycle_label}"
-            xlsx_path = settings.reports_daily_path / f"{base_name}.xlsx"
-            pdf_path = settings.reports_daily_path / f"{base_name}.pdf"
-
-            _excel_svc.generate_daily(rows, xlsx_path, cycle_label, report_date)
-            _pdf_svc.generate_daily(rows, pdf_path, cycle_label, report_date, utcnow())
-            logger.info("job_daily_cycle_files_generated", xlsx=str(xlsx_path), pdf=str(pdf_path))
-
-            # 4. Registra archivos en BD
-            daily_files = [
-                await _save_report_file(
-                    session,
-                    report_type="daily",
-                    fmt="xlsx",
-                    filename=xlsx_path.name,
-                    file_path=str(xlsx_path),
-                    cycle_label=cycle_label,
-                ),
-                await _save_report_file(
-                    session,
-                    report_type="daily",
-                    fmt="pdf",
-                    filename=pdf_path.name,
-                    file_path=str(pdf_path),
-                    cycle_label=cycle_label,
-                ),
-            ]
-
-            # 5. Envía correo
-            subject = "Seguimiento TCC"
-            html = body_daily_report(report_date.strftime("%d/%m/%Y"), cycle_label)
-            sent = await send_email(
-                to=DAILY_RECIPIENTS,
-                subject=subject,
-                body_html=html,
-                attachments=[pdf_path],
-            )
-
-            # 6. Actualiza estado de envío en BD
-            if sent:
-                now = utcnow()
-                for report_file in daily_files:
-                    report_file.email_sent = True
-                    report_file.email_sent_at = now
-            await session.commit()
-            logger.info("job_daily_cycle_done", cycle=cycle_label, email_sent=sent)
 
         except Exception:
             logger.exception("job_daily_cycle_error", cycle=cycle_label)

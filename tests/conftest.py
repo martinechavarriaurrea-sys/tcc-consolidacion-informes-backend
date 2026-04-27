@@ -52,6 +52,17 @@ async def engine():
     await engine.dispose()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def clear_database(engine):
+    async with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
+    yield
+    async with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
+
+
 @pytest_asyncio.fixture
 async def session(engine) -> AsyncGenerator[AsyncSession, None]:
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -66,7 +77,12 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
 
     async def override_get_db():
         async with factory() as sess:
-            yield sess
+            try:
+                yield sess
+                await sess.commit()
+            except Exception:
+                await sess.rollback()
+                raise
 
     app: FastAPI = create_app()
     app.dependency_overrides[get_db] = override_get_db

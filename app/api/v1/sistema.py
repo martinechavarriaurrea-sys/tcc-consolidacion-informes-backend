@@ -24,7 +24,9 @@ async def system_health():
     running_on_vercel = bool(os.getenv("VERCEL"))
     scheduler_mode = "external" if running_on_vercel else ("disabled" if settings.disable_scheduler else "embedded")
     scheduler_activo = False
-    email_configured = bool(settings.smtp_user and settings.smtp_password)
+    backend_email_configured = bool(settings.smtp_user and settings.smtp_password)
+    email_mode = "github_actions" if scheduler_mode == "external" else ("smtp" if backend_email_configured else "not_configured")
+    email_configured = backend_email_configured or scheduler_mode == "external"
     cron_protected = bool(
         settings.cron_secret
         or (settings.github_oidc_repository and settings.github_oidc_audience and settings.github_oidc_ref)
@@ -60,6 +62,7 @@ async def system_health():
         "scheduler_activo": scheduler_activo,
         "scheduler_mode": scheduler_mode,
         "email_configured": email_configured,
+        "email_mode": email_mode,
         "cron_protected": cron_protected,
         "total_guias_bd": total_guias,
         "bd_conectada": bd_conectada,

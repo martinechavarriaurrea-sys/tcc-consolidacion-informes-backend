@@ -259,6 +259,9 @@ async def ingest_tracking_results(
         if pdf_path and pdf_path.exists():
             pdf_b64 = base64.b64encode(pdf_path.read_bytes()).decode()
             pdf_filename = pdf_path.name
+        else:
+            # No active shipments — pdf_b64 stays None and no email is sent. This is expected.
+            logger.warning("no_active_shipments_skip_email")
 
         now = datetime.now(BOGOTA_TZ)
         if now.weekday() == 0 and payload.cycle_label == "0700":
