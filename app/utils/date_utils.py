@@ -28,3 +28,17 @@ def is_older_than_hours(dt: datetime, hours: float) -> bool:
 def start_of_today() -> datetime:
     now = utcnow()
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def count_days_excluding_sundays(start: date, end: date) -> int:
+    """Cuenta días entre start y end excluyendo domingos (weekday==6)."""
+    if end <= start:
+        return 0
+    total = (end - start).days
+    # Contar cuántos domingos caen en el rango [start, end)
+    # El primer domingo >= start
+    days_to_first_sunday = (6 - start.weekday()) % 7
+    if days_to_first_sunday >= total:
+        return total
+    sundays = (total - days_to_first_sunday + 6) // 7
+    return total - sundays

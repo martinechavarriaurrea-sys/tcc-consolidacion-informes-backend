@@ -52,7 +52,7 @@ from app.services.excel_service import DailyReportRow, ExcelService, WeeklyRepor
 from app.services.pdf_service import PdfService
 from app.services.report_service import ReportService
 from app.services.tracking_service import TrackingService
-from app.utils.date_utils import hours_since, utcnow, week_boundaries
+from app.utils.date_utils import count_days_excluding_sundays, hours_since, utcnow, week_boundaries
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -157,12 +157,12 @@ async def _collect_daily_rows(
         if not shipment.is_active and shipment.delivered_at:
             obs_parts.append("Entregado en este ciclo")
 
-        # Dias en transito desde fecha de despacho
+        # Dias en transito desde fecha de despacho (sin contar domingos)
         days_in_transit = None
         if shipment.shipping_date:
             end = (shipment.delivered_at.date() if shipment.delivered_at
                    else cycle_date)
-            days_in_transit = (end - shipment.shipping_date).days
+            days_in_transit = count_days_excluding_sundays(shipment.shipping_date, end)
 
         rows.append(DailyReportRow(
             query_date=cycle_date,

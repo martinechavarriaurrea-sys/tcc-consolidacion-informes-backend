@@ -1,5 +1,6 @@
 from math import ceil
 from datetime import date, datetime, timezone
+from app.utils.date_utils import count_days_excluding_sundays
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -32,7 +33,7 @@ ISSUE_STATUSES = {"novedad", "devuelto"}
 def _dias_en_transito(shipment: Shipment) -> int | None:
     if shipment.shipping_date:
         end = shipment.delivered_at.date() if shipment.delivered_at else date.today()
-        return max(0, (end - shipment.shipping_date).days)
+        return count_days_excluding_sundays(shipment.shipping_date, end)
     return None
 
 

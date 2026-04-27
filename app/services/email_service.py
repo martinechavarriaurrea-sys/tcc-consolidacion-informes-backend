@@ -36,16 +36,22 @@ settings = get_settings()
 DAILY_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
     ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
+    ("Angela Maria Diaz Cadavid", "adiaz@asteco.com.co"),
+    ("Bryan Villada", "bvillada@asteco.com.co"),
 ]
 
 WEEKLY_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
     ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
+    ("Angela Maria Diaz Cadavid", "adiaz@asteco.com.co"),
+    ("Bryan Villada", "bvillada@asteco.com.co"),
 ]
 
 ALERT_RECIPIENTS = [
     ("Martin Echavarria", "echavarriam@asteco.com.co"),
     ("Juan Camilo Munoz", "jmunoz@asteco.com.co"),
+    ("Angela Maria Diaz Cadavid", "adiaz@asteco.com.co"),
+    ("Bryan Villada", "bvillada@asteco.com.co"),
 ]
 
 

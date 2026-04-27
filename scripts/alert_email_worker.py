@@ -63,7 +63,7 @@ async def main() -> None:
     smtp_password = os.getenv("SMTP_PASSWORD", "")
     smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    recipients = [r.strip() for r in os.getenv("EMAIL_RECIPIENTS", "echavarriam@asteco.com.co,jmunoz@asteco.com.co").split(",")]
+    recipients = [r.strip() for r in os.getenv("EMAIL_RECIPIENTS", "echavarriam@asteco.com.co,jmunoz@asteco.com.co,adiaz@asteco.com.co,bvillada@asteco.com.co").split(",")]
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
         resp = await client.get(
