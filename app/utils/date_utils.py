@@ -1,4 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+
+BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 
 def utcnow() -> datetime:
@@ -26,8 +30,9 @@ def is_older_than_hours(dt: datetime, hours: float) -> bool:
 
 
 def start_of_today() -> datetime:
-    now = utcnow()
-    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    now_local = utcnow().astimezone(BOGOTA_TZ)
+    local_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_start.astimezone(timezone.utc)
 
 
 def count_days_excluding_sundays(start: date, end: date) -> int:
