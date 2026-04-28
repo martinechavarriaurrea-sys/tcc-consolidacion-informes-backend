@@ -97,7 +97,8 @@ async def trigger_run(
             raise HTTPException(status_code=422, detail=f"Ciclo inválido: {cycle}. Use 0700, 1200 o 1600.")
 
         s = get_settings()
-        if not s.github_token:
+        github_token = s.github_token.strip()
+        if not github_token:
             raise HTTPException(
                 status_code=503,
                 detail="GITHUB_TOKEN no configurado en el servidor.",
@@ -111,7 +112,7 @@ async def trigger_run(
         logger.info("dispatch_trigger repo=%s workflow=%s cycle=%s user=%s", repo, workflow, cycle, user)
 
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(url, headers=_gh_headers(s.github_token), json=payload)
+            resp = await client.post(url, headers=_gh_headers(github_token), json=payload)
 
         logger.info("dispatch_trigger_response status=%s", resp.status_code)
 
@@ -151,7 +152,8 @@ async def get_run_status(authorization: str | None = Header(default=None)):
         _verify_jwt(authorization)
 
         s = get_settings()
-        if not s.github_token:
+        github_token = s.github_token.strip()
+        if not github_token:
             raise HTTPException(status_code=503, detail="GITHUB_TOKEN no configurado.")
 
         repo = s.github_oidc_repository
@@ -160,7 +162,7 @@ async def get_run_status(authorization: str | None = Header(default=None)):
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 url,
-                headers=_gh_headers(s.github_token),
+                headers=_gh_headers(github_token),
                 params={"event": "workflow_dispatch", "per_page": "5"},
             )
 
