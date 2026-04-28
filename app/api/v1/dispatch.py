@@ -16,7 +16,7 @@ import traceback
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
@@ -125,16 +125,12 @@ async def dispatch_health():
 
 
 @router.post("/trigger")
-async def trigger_run(
-    cycle: str = "0700",
-    authorization: str | None = Header(default=None),
-):
+async def trigger_run(cycle: str = "0700"):
     """
     Dispara workflow_dispatch en GitHub con hasta 3 reintentos.
     Retorna inmediatamente — el frontend hace polling a /status.
+    Endpoint público — el GITHUB_TOKEN vive en el servidor, no hay riesgo.
     """
-    user = _verify_jwt(authorization)
-
     if cycle not in _VALID_CYCLES:
         raise HTTPException(status_code=422, detail=f"Ciclo '{cycle}' inválido. Use 0700, 1200 o 1600.")
 
@@ -153,7 +149,7 @@ async def trigger_run(
 
             if resp.status_code == 204:
                 triggered_at = datetime.now(timezone.utc).isoformat()
-                logger.info("dispatch_trigger_ok attempt=%s cycle=%s", attempt, cycle)
+                logger.info("dispatch_trigger_ok attempt=%s cycle=%s user=public", attempt, cycle)
                 return {
                     "triggered": True,
                     "cycle": cycle,
