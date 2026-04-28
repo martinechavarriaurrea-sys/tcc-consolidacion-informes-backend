@@ -55,6 +55,26 @@ async def send_pending_daily(cycle_label: str, *, fallback_run: bool = True) -> 
 
         if report is None:
             logger.warning("pending_daily_report_not_found", cycle=cycle_label)
+            sent_result = await session.execute(
+                select(ReportFile)
+                .where(
+                    ReportFile.report_type == "daily",
+                    ReportFile.format == "pdf",
+                    ReportFile.cycle_label == cycle_label,
+                    ReportFile.email_sent == True,  # noqa: E712
+                    ReportFile.generated_at >= cutoff,
+                )
+                .order_by(ReportFile.generated_at.desc())
+                .limit(1)
+            )
+            sent_report = sent_result.scalar_one_or_none()
+            if sent_report is not None:
+                logger.info(
+                    "daily_report_already_sent",
+                    cycle=cycle_label,
+                    filename=sent_report.filename,
+                )
+                return True
         else:
             pdf_path = settings.reports_daily_path / report.filename
             pdf_path.write_bytes(base64.b64decode(report.content_b64 or ""))
@@ -104,6 +124,21 @@ async def send_pending_weekly(*, fallback_run: bool = True) -> bool:
 
         if report is None:
             logger.warning("pending_weekly_report_not_found")
+            sent_result = await session.execute(
+                select(ReportFile)
+                .where(
+                    ReportFile.report_type == "weekly",
+                    ReportFile.format == "pdf",
+                    ReportFile.email_sent == True,  # noqa: E712
+                    ReportFile.generated_at >= cutoff,
+                )
+                .order_by(ReportFile.generated_at.desc())
+                .limit(1)
+            )
+            sent_report = sent_result.scalar_one_or_none()
+            if sent_report is not None:
+                logger.info("weekly_report_already_sent", filename=sent_report.filename)
+                return True
         else:
             pdf_path = settings.reports_weekly_path / report.filename
             pdf_path.write_bytes(base64.b64decode(report.content_b64 or ""))

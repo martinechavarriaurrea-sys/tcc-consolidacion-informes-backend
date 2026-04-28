@@ -36,8 +36,12 @@ $logsDir = Join-Path $backendRoot "logs\scheduled"
 $label = if ($CycleLabel) { "$Job`_$CycleLabel" } else { $Job }
 $timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
 $logFile = Join-Path $logsDir "$timestamp`_$label.log"
+$mutexName = "Global\TCC_Scheduled_$($label -replace '[^A-Za-z0-9_]', '_')"
 
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+
+$mutex = New-Object System.Threading.Mutex($false, $mutexName)
+$hasLock = $false
 
 Import-DotEnvFile (Join-Path $backendRoot ".env")
 Import-DotEnvFile (Join-Path $backendRoot ".env.local")
@@ -52,9 +56,19 @@ if ($CycleLabel) {
 
 Push-Location $backendRoot
 try {
+    $hasLock = $mutex.WaitOne(0)
+    if (-not $hasLock) {
+        "Another instance is already running for $label. Skipping duplicate execution." | Tee-Object -FilePath $logFile -Append
+        exit 0
+    }
+
     & $PythonExe @arguments 2>&1 | Tee-Object -FilePath $logFile -Append
     $exitCode = $LASTEXITCODE
 } finally {
+    if ($hasLock) {
+        $mutex.ReleaseMutex()
+    }
+    $mutex.Dispose()
     Pop-Location
 }
 
