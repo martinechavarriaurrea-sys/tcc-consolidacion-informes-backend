@@ -143,7 +143,7 @@ async def trigger_run(cycle: str = "0700"):
     last_error = ""
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            logger.info("dispatch_trigger_attempt=%s cycle=%s user=%s", attempt, cycle, user)
+            logger.info("dispatch_trigger_attempt=%s cycle=%s", attempt, cycle)
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.post(url, headers=_gh_headers(token), json=payload)
 
