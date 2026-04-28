@@ -134,7 +134,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run GitHub TCC worker (consulta TCC + genera PDF + envia email)
+      - name: Run GitHub TCC worker (consulta TCC + genera PDF; Outlook local envia email)
         if: steps.target.outputs.job == 'daily'
         shell: bash
         env:

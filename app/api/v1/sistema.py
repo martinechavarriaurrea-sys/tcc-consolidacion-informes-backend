@@ -25,7 +25,7 @@ async def system_health():
     scheduler_mode = "external" if running_on_vercel else ("disabled" if settings.disable_scheduler else "embedded")
     scheduler_activo = False
     backend_email_configured = bool(settings.smtp_user and settings.smtp_password)
-    email_mode = "github_actions" if scheduler_mode == "external" else ("smtp" if backend_email_configured else "not_configured")
+    email_mode = "external_outlook" if scheduler_mode == "external" else ("smtp" if backend_email_configured else "not_configured")
     email_configured = backend_email_configured or scheduler_mode == "external"
     cron_protected = bool(
         settings.cron_secret
