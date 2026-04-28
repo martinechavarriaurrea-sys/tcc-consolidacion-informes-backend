@@ -7,6 +7,7 @@ from sqlalchemy import func, select, text
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
+from app.models.report_file import ReportFile
 from app.models.shipment import Shipment
 from app.models.tracking_run import TrackingRun
 
@@ -45,9 +46,26 @@ async def system_health():
                     .limit(1)
                 )
             ).scalar_one_or_none()
+            latest_report_at = (
+                await session.execute(
+                    select(ReportFile.generated_at)
+                    .where(ReportFile.report_type == "daily")
+                    .order_by(ReportFile.generated_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+            latest_activity = None
             if last_run and last_run.finished_at:
-                ultima_consulta_tcc = last_run.finished_at.isoformat()
-                scheduler_activo = last_run.finished_at >= datetime.now(timezone.utc) - timedelta(hours=20)
+                latest_activity = last_run.finished_at
+            if latest_report_at and (latest_activity is None or latest_report_at > latest_activity):
+                latest_activity = latest_report_at
+
+            if latest_activity:
+                if latest_activity.tzinfo is None:
+                    latest_activity = latest_activity.replace(tzinfo=timezone.utc)
+                ultima_consulta_tcc = latest_activity.isoformat()
+                scheduler_activo = latest_activity >= datetime.now(timezone.utc) - timedelta(hours=20)
     except Exception:
         bd_conectada = False
 
