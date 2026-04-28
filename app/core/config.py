@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     github_oidc_audience: str = "tcc-consolidacion-informes-backend"
     github_oidc_ref: str = "refs/heads/main"
 
+    # GitHub token para trigger manual desde el dashboard
+    # PAT con scope actions:write — configurar en Vercel env vars
+    github_token: str = ""
+    github_workflow_file: str = "tcc-scheduler.yml"
+
     # Alertas
     alert_no_movement_hours: int = 72
 
