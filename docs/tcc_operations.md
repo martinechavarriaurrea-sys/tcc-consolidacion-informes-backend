@@ -1,5 +1,42 @@
 # Recomendaciones de operación — Integración TCC
 
+## Flujo actual — Frontend como fuente de verdad (sin emails)
+
+El envío de emails fue eliminado del flujo principal. El dashboard web es
+la fuente de verdad del estado de las guías.
+
+### Flujo técnico por ciclo
+
+```
+GitHub Actions (07:00 / 12:00 / 16:00 UTC-5)
+  │
+  └─ github_tracking_worker.py
+      ├─ Consulta TCC para cada guía activa
+      └─ POST /api/cron/ingest-tracking → backend actualiza BD
+
+Frontend (/dashboard)
+  └─ Polling cada 60s → GET /api/v1/dashboard/stats
+      ├─ KPIs en tiempo real (activas, entregadas, novedad, sin movimiento)
+      ├─ Estado del último ciclo ejecutado
+      ├─ Próximo ciclo programado
+      └─ Tabla de guías con estado y colores actualizados
+```
+
+### Tareas de Windows (desactivadas del flujo normal)
+
+Las siguientes tareas del Programador de tareas de Windows **ya no hacen falta**
+para el flujo principal (el dashboard reemplaza su función):
+
+- `TCC Daily 0700` / `TCC Daily 0700 Retry`
+- `TCC Daily 1200` / `TCC Daily 1200 Retry`
+- `TCC Daily 1600` / `TCC Daily 1600 Retry`
+
+**No eliminarlas** — quedan disponibles como contingencia de emergencia.
+Los scripts `local_email_dispatcher.py` y `send_email_graph.py` permanecen
+intactos pero no se invocan en el flujo normal.
+
+---
+
 ## Configuración base para producción
 
 ```env

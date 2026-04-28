@@ -8,11 +8,11 @@ GET  /api/v1/reports/history      → lista los reportes generados (metadata BD)
 """
 
 import asyncio
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -249,3 +249,78 @@ async def report_history(
         }
         for f in files
     ]
+
+
+@router.get("/pending")
+async def get_pending_report(
+    cycle: str = Query(..., description="Ciclo del reporte: 0700, 1200 o 1600"),
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Retorna el reporte PDF pendiente de envio (email_sent=False) para el ciclo indicado.
+    Usado por scripts/send_email_graph.py desde GitHub Actions.
+    Retorna 404 si ya fue enviado o no existe aun — la ausencia no es un error.
+    """
+    from app.api.v1.cron import _verify_cron_authorization
+    await _verify_cron_authorization(authorization)
+
+    cutoff = utcnow() - timedelta(hours=12)
+    stmt = (
+        select(ReportFile)
+        .where(
+            ReportFile.report_type == "daily",
+            ReportFile.format == "pdf",
+            ReportFile.cycle_label == cycle,
+            ReportFile.email_sent == False,  # noqa: E712
+            ReportFile.content_b64.is_not(None),
+            ReportFile.generated_at >= cutoff,
+        )
+        .order_by(ReportFile.generated_at.desc())
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    report = result.scalar_one_or_none()
+
+    if report is None:
+        raise HTTPException(status_code=404, detail="No hay reporte pendiente para este ciclo.")
+
+    logger.info("pending_report_returned id=%s filename=%s cycle=%s", report.id, report.filename, cycle)
+    return {
+        "id": report.id,
+        "filename": report.filename,
+        "cycle_label": report.cycle_label,
+        "generated_at": report.generated_at.isoformat(),
+        "content_b64": report.content_b64,
+    }
+
+
+@router.patch("/{report_id}/mark_sent")
+async def mark_report_sent(
+    report_id: int,
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Marca un reporte como enviado por email.
+    Usado por scripts/send_email_graph.py para garantizar idempotencia.
+    """
+    from app.api.v1.cron import _verify_cron_authorization
+    await _verify_cron_authorization(authorization)
+
+    result = await session.execute(select(ReportFile).where(ReportFile.id == report_id))
+    report = result.scalar_one_or_none()
+
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"Reporte {report_id} no encontrado.")
+
+    report.email_sent = True
+    report.email_sent_at = utcnow()
+    await session.commit()
+
+    logger.info("report_marked_sent_via_api id=%s filename=%s", report_id, report.filename)
+    return {
+        "id": report_id,
+        "email_sent": True,
+        "email_sent_at": report.email_sent_at.isoformat(),
+    }

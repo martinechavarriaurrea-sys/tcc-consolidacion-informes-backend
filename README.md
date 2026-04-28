@@ -1,18 +1,18 @@
-﻿# TCC-CONSOLIDACION-INFORMES
+# TCC-CONSOLIDACION-INFORMES
 
-Sistema de seguimiento y consolidaciÃ³n automÃ¡tica de guÃ­as de transporte TCC para **ASTECO**.
+Sistema de seguimiento y consolidación automática de guías de transporte TCC para **ASTECO**.
 
 ---
 
-## DescripciÃ³n
+## Descripción
 
-Monitorea guÃ­as TCC de forma automÃ¡tica 3 veces al dÃ­a. Por cada ciclo:
+Monitorea guías TCC de forma automática 3 veces al día. Por cada ciclo:
 
-1. Consulta el estado actual de cada guÃ­a activa en TCC
+1. Consulta el estado actual de cada guía activa en TCC
 2. Detecta cambios, novedades y entregas
 3. Genera un reporte en **Excel** y **PDF** de formato corporativo
-4. EnvÃ­a el reporte por correo a los destinatarios configurados
-5. Detecta guÃ­as sin movimiento por mÃ¡s de 72 horas y alerta por separado
+4. Envía el reporte por correo a los destinatarios configurados (via Microsoft Graph API)
+5. Detecta guías sin movimiento por más de 72 horas y alerta por separado
 
 Los lunes a las 7 AM genera un **consolidado semanal** de la semana anterior.
 
@@ -22,43 +22,43 @@ Los lunes a las 7 AM genera un **consolidado semanal** de la semana anterior.
 
 ```
 TCC-CONSOLIDACION-INFORMES/
-â”œâ”€â”€ app/
-â”‚   â”œâ”€â”€ api/v1/          FastAPI routers (shipments, tracking, dashboard, reports)
-â”‚   â”œâ”€â”€ core/            Config, DB, logging, exceptions
-â”‚   â”œâ”€â”€ jobs/            Scheduler APScheduler + jobs (tracking_job.py)
-â”‚   â”œâ”€â”€ models/          SQLAlchemy ORM models
-â”‚   â”œâ”€â”€ repositories/    Acceso a BD por entidad
-â”‚   â”œâ”€â”€ services/        LÃ³gica de negocio (tracking, alerts, excel, pdf, email)
-â”‚   â””â”€â”€ utils/           date_utils, status_normalizer
-â”œâ”€â”€ alembic/             Migraciones de BD
-â”œâ”€â”€ tests/               Tests unitarios
-â”œâ”€â”€ scripts/             run_job.py (ejecuciÃ³n manual)
-â”œâ”€â”€ Dockerfile
-â””â”€â”€ docker-compose.yml
+├── app/
+│   ├── api/v1/          FastAPI routers (shipments, tracking, dashboard, reports)
+│   ├── core/            Config, DB, logging, exceptions
+│   ├── jobs/            Scheduler APScheduler + jobs (tracking_job.py)
+│   ├── models/          SQLAlchemy ORM models
+│   ├── repositories/    Acceso a BD por entidad
+│   ├── services/        Lógica de negocio (tracking, alerts, excel, pdf, email)
+│   └── utils/           date_utils, status_normalizer
+├── alembic/             Migraciones de BD
+├── tests/               Tests unitarios
+├── scripts/             github_tracking_worker.py, send_email_graph.py
+├── Dockerfile
+└── docker-compose.yml
 
 frontend/                Next.js (dashboard)
-reports/                 Archivos generados (Excel + PDF) â€” gitignored
+reports/                 Archivos generados (Excel + PDF) — gitignored
 ```
 
 ---
 
-## Integracion TCC (capa proveedor)
+## Integración TCC (capa proveedor)
 
-- Diseno tecnico: [docs/tcc_integration.md](docs/tcc_integration.md)
+- Diseño técnico: [docs/tcc_integration.md](docs/tcc_integration.md)
 - Troubleshooting: [docs/tcc_troubleshooting.md](docs/tcc_troubleshooting.md)
 - Recomendaciones operativas: [docs/tcc_operations.md](docs/tcc_operations.md)
 
 ---
 
-## Horarios de ejecuciÃ³n (America/Bogota)
+## Horarios de ejecución (America/Bogota)
 
-| Job                  | CuÃ¡ndo              | QuÃ© hace                                     |
+| Job                  | Cuándo              | Qué hace                                     |
 |----------------------|---------------------|----------------------------------------------|
-| Ciclo diario 07:00   | Todos los dÃ­as      | Consulta TCC + reporte Excel/PDF + email     |
-| Ciclo diario 12:00   | Todos los dÃ­as      | Consulta TCC + reporte Excel/PDF + email     |
-| Ciclo diario 16:00   | Todos los dÃ­as      | Consulta TCC + reporte Excel/PDF + email     |
+| Ciclo diario 07:00   | Todos los días      | Consulta TCC + reporte Excel/PDF + email     |
+| Ciclo diario 12:00   | Todos los días      | Consulta TCC + reporte Excel/PDF + email     |
+| Ciclo diario 16:00   | Todos los días      | Consulta TCC + reporte Excel/PDF + email     |
 | Consolidado semanal  | Lunes 07:00         | Resumen semana anterior + email              |
-| VerificaciÃ³n alertas | Cada 30 min         | Detecta guÃ­as sin movimiento â‰¥72h            |
+| Verificación alertas | Cada 30 min         | Detecta guías sin movimiento ≥72h            |
 
 ---
 
@@ -67,8 +67,8 @@ reports/                 Archivos generados (Excel + PDF) â€” gitignored
 | Tipo       | Destinatarios                                                |
 |------------|--------------------------------------------------------------|
 | Diario     | Angela Maria Diaz Cadavid, Bryan Villada                     |
-| Semanal    | Juan Camilo MuÃ±oz                                            |
-| Alertas    | Juan Camilo MuÃ±oz, Bryan Villada                             |
+| Semanal    | Juan Camilo Muñoz                                            |
+| Alertas    | Juan Camilo Muñoz, Bryan Villada                             |
 
 Para modificar: editar constantes en [app/services/email_service.py](app/services/email_service.py).
 
@@ -78,13 +78,13 @@ Para modificar: editar constantes en [app/services/email_service.py](app/service
 
 ```
 reports/
-â”œâ”€â”€ diario/
-â”‚   â”œâ”€â”€ reporte_tcc_diario_2026-04-22_0700.xlsx
-â”‚   â”œâ”€â”€ reporte_tcc_diario_2026-04-22_0700.pdf
-â”‚   â””â”€â”€ ...
-â””â”€â”€ semanal/
-    â”œâ”€â”€ reporte_tcc_semanal_2026-04-13_al_2026-04-18.xlsx
-    â””â”€â”€ reporte_tcc_semanal_2026-04-13_al_2026-04-18.pdf
+├── diario/
+│   ├── reporte_tcc_diario_2026-04-22_0700.xlsx
+│   ├── reporte_tcc_diario_2026-04-22_0700.pdf
+│   └── ...
+└── semanal/
+    ├── reporte_tcc_semanal_2026-04-13_al_2026-04-18.xlsx
+    └── reporte_tcc_semanal_2026-04-13_al_2026-04-18.pdf
 ```
 
 ---
@@ -109,9 +109,9 @@ source .venv/bin/activate     # Linux/Mac
 pip install -r requirements.txt
 python -m playwright install chromium   # Opcional: solo para validaciones de navegador
 
-# 3. ConfiguraciÃ³n
+# 3. Configuración
 cp .env.example .env
-# Editar .env con: DATABASE_URL, SMTP_*, etc.
+# Editar .env con: DATABASE_URL, AZURE_*, SENDER_EMAIL, RECIPIENT_EMAILS, etc.
 
 # 4. Migraciones
 alembic upgrade head
@@ -131,7 +131,7 @@ uvicorn app.main:app --reload --port 8000
 ## Arranque con Docker
 
 ```bash
-# Copiar y completar configuraciÃ³n
+# Copiar y completar configuración
 cp .env.example .env
 
 # Levantar DB + backend
@@ -149,7 +149,7 @@ docker-compose --profile full up --build -d
 
 ---
 
-## EjecuciÃ³n manual de jobs
+## Ejecución manual de jobs
 
 ```bash
 # Desde terminal (requiere .env configurado)
@@ -170,7 +170,7 @@ POST /api/v1/reports/trigger/alerts
 
 ---
 
-## ExportaciÃ³n manual de reportes
+## Exportación manual de reportes
 
 ```
 GET /api/v1/reports/daily?format=xlsx
@@ -196,49 +196,53 @@ pytest --cov=app --cov-report=term-missing
 
 ---
 
-## PolÃ­tica de alertas 72 horas
+## Política de alertas 72 horas
 
-- **CuÃ¡ndo:** guÃ­a activa sin cambio de estado por â‰¥72 horas
-- **Anti-spam:** solo se crea alerta si no hay una abierta para la misma guÃ­a
-- **ResoluciÃ³n automÃ¡tica:** cuando la guÃ­a vuelve a tener movimiento
+- **Cuándo:** guía activa sin cambio de estado por ≥72 horas
+- **Anti-spam:** solo se crea alerta si no hay una abierta para la misma guía
+- **Resolución automática:** cuando la guía vuelve a tener movimiento
 - **Referencia:** [app/services/alert_service.py](app/services/alert_service.py)
 
 ---
 
 ## Variables de entorno clave
 
-| Variable                        | DescripciÃ³n                            | Default             |
+| Variable                        | Descripción                            | Default             |
 |---------------------------------|----------------------------------------|---------------------|
 | `DATABASE_URL`                  | PostgreSQL async                       | (requerido)         |
-| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | ConfiguraciÃ³n SMTP           | (requerido)         |
+| `AZURE_CLIENT_ID`               | App ID en Azure AD para Graph API      | (requerido)         |
+| `AZURE_CLIENT_SECRET`           | Secreto de la app Azure AD             | (requerido)         |
+| `AZURE_TENANT_ID`               | Tenant ID de Azure AD                  | (requerido)         |
+| `SENDER_EMAIL`                  | Correo remitente con licencia M365     | (requerido)         |
+| `RECIPIENT_EMAILS`              | Destinatarios separados por coma       | (requerido)         |
 | `ALERT_NO_MOVEMENT_HOURS`       | Umbral de alerta en horas              | `72`                |
-| `ALERT_CHECK_INTERVAL_MINUTES`  | Frecuencia de verificaciÃ³n de alertas  | `30`                |
+| `ALERT_CHECK_INTERVAL_MINUTES`  | Frecuencia de verificación de alertas  | `30`                |
 | `REPORTS_OUTPUT_DIR`            | Directorio de archivos generados       | `./reports`         |
-| `EMAIL_MAX_RETRIES`             | Reintentos SMTP                        | `3`                 |
 | `TCC_INTEGRATION_MODE`          | `web`, `api` o `auto`                  | `web`               |
 
 Ver [.env.example](.env.example) para la lista completa.
+Ver [docs/azure_email_setup.md](docs/azure_email_setup.md) para configurar las variables Azure.
 
 ---
 
 ## Despliegue en nube
 
-### OpciÃ³n A â€” Railway / Render (mÃ¡s rÃ¡pido)
+### Opción A — Railway / Render (más rápido)
 
 1. Push a GitHub
 2. Conectar repo en Railway/Render
 3. Configurar env vars en el panel
 4. Agregar PostgreSQL como addon
-5. El scheduler corre dentro del mismo proceso uvicorn â€” no requiere worker separado
+5. El scheduler corre dentro del mismo proceso uvicorn — no requiere worker separado
 
-### OpciÃ³n B â€” AWS ECS / GCP Cloud Run
+### Opción B — AWS ECS / GCP Cloud Run
 
 1. Build y push a ECR / Artifact Registry
 2. Task Definition con las env vars
 3. RDS (AWS) o Cloud SQL (GCP) para PostgreSQL
 4. Volumen de reportes: montar S3/GCS o usar EFS
 
-### OpciÃ³n C â€” VPS con Docker Compose
+### Opción C — VPS con Docker Compose
 
 ```bash
 git clone <repo>
@@ -250,7 +254,7 @@ docker-compose --profile migrate up migrate
 
 ### Scheduler multi-instancia
 
-Si se escala a mÃ¡s de 1 rÃ©plica del backend, usar APScheduler con JobStore en PostgreSQL
+Si se escala a más de 1 réplica del backend, usar APScheduler con JobStore en PostgreSQL
 para evitar ejecuciones duplicadas:
 
 ```python
@@ -262,19 +266,19 @@ jobstores = {"default": SQLAlchemyJobStore(url=settings.database_url_sync)}
 
 ## Logs y eventos clave
 
-| Evento                    | QuÃ© indica                                |
+| Evento                    | Qué indica                                |
 |---------------------------|-------------------------------------------|
-| `job_daily_cycle_start`   | El job arrancÃ³                            |
+| `job_daily_cycle_start`   | El job arrancó                            |
 | `job_daily_cycle_done`    | Ciclo completo (ver `email_sent`)         |
 | `tracking_run_done`       | Resultado de consultas a TCC             |
-| `email_sent`              | Correo enviado OK                         |
-| `email_send_failed_final` | FallÃ³ tras todos los reintentos           |
+| `graph_email_sent`        | Correo enviado OK via Graph API           |
+| `email_send_failed_final` | Falló tras todos los reintentos           |
 | `alert_no_movement`       | Nueva alerta 72h detectada               |
 | `job_weekly_report_done`  | Consolidado semanal generado              |
 
 ---
 
-## PreparaciÃ³n para GitHub
+## Preparación para GitHub
 
 ```bash
 echo ".env" >> .gitignore
@@ -284,7 +288,7 @@ echo ".venv/" >> .gitignore
 
 git init
 git add .
-git commit -m "feat: capa operativa â€” scheduler, reportes Excel/PDF, alertas, Docker"
+git commit -m "feat: capa operativa — scheduler, reportes Excel/PDF, alertas, Docker"
 git remote add origin https://github.com/tu-org/tcc-consolidacion.git
 git push -u origin main
 ```
@@ -293,6 +297,4 @@ git push -u origin main
 
 ---
 
-Sistema interno ASTECO Â· Contacto: martinechavarriaurrea@gmail.com
-
-
+Sistema interno ASTECO · Contacto: martinechavarriaurrea@gmail.com

@@ -134,17 +134,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run GitHub TCC worker (consulta TCC + genera PDF; Outlook local envia email)
+      - name: Run GitHub TCC worker (consulta TCC + actualiza BD)
         if: steps.target.outputs.job == 'daily'
         shell: bash
         env:
           BACKEND_URL: ${{ env.BACKEND_URL }}
           CRON_TOKEN: ${{ steps.oidc.outputs.token }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
           SKIP_SMTP_EMAIL: "true"
         run: |
           set -euo pipefail
