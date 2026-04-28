@@ -90,12 +90,11 @@ def _parse_run(run: dict) -> dict:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/health")
-async def dispatch_health(authorization: str | None = Header(default=None)):
+async def dispatch_health():
     """
     Verifica que el sistema de trigger manual esté operativo.
-    Llama a GitHub API para validar el token antes de mostrar el botón.
+    Endpoint público — no requiere sesión de usuario.
     """
-    _verify_jwt(authorization)
     token = _get_token()
 
     try:
@@ -193,12 +192,11 @@ async def trigger_run(
 
 
 @router.get("/status")
-async def get_run_status(authorization: str | None = Header(default=None)):
+async def get_run_status():
     """
-    Devuelve los 5 runs más recientes para que el frontend identifique
-    el run correcto sin depender de timing exacto.
+    Devuelve los 5 runs más recientes.
+    Endpoint público — los runs de GitHub Actions son información no sensible.
     """
-    _verify_jwt(authorization)
     token = _get_token()
     repo = get_settings().github_oidc_repository
 
