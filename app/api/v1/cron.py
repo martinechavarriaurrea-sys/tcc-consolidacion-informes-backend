@@ -14,7 +14,6 @@ from app.core.logging import get_logger
 from app.integrations.tcc.base import TrackingEventData, TrackingResult
 from app.jobs.tracking_job import (
     job_check_alerts,
-    job_check_alerts_data,
     job_cleanup_old_guias,
     job_daily_cycle,
     job_daily_report_only,
@@ -296,16 +295,6 @@ async def alerts_dispatch(authorization: str | None = Header(default=None)):
     await job_check_alerts()
     logger.info("cron_alerts_dispatch_done")
     return {"status": "completed", "jobs": ["alerts"]}
-
-
-@router.get("/alert-data")
-async def alert_data_dispatch(authorization: str | None = Header(default=None)):
-    """Detecta alertas 72h, las registra en BD y retorna datos para que GitHub Actions envie email."""
-    await _verify_cron_authorization(authorization)
-    logger.info("cron_alert_data_start")
-    alerts = await job_check_alerts_data()
-    logger.info("cron_alert_data_done", count=len(alerts))
-    return {"status": "completed", "new_alerts": alerts, "count": len(alerts)}
 
 
 @router.get("/weekly")

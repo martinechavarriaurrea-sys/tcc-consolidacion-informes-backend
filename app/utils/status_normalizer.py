@@ -13,11 +13,13 @@ class NormalizedStatus(StrEnum):
     REGISTRADO = "registrado"
     RECOGIDO = "recogido"
     EN_TRANSITO = "en_transito"
+    EN_TCC = "en_tcc"
     EN_RUTA = "en_ruta_entrega"
     ENTREGADO = "entregado"
     NOVEDAD = "novedad"
     DEVUELTO = "devuelto"
     FALLIDO = "fallido"
+    REEMPLAZADO = "reemplazado"
     DESCONOCIDO = "desconocido"
 
 
@@ -26,6 +28,7 @@ TERMINAL_STATUSES = {
     NormalizedStatus.ENTREGADO,
     NormalizedStatus.DEVUELTO,
     NormalizedStatus.FALLIDO,
+    NormalizedStatus.REEMPLAZADO,
 }
 
 # Estados que representan problemas (para alertas y reportes)
@@ -60,6 +63,7 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     (r"retenida.*dian", NormalizedStatus.NOVEDAD),
     (r"proceso.*indemnizaci[oó]n", NormalizedStatus.NOVEDAD),
     (r"demorad", NormalizedStatus.NOVEDAD),
+    (r"reemplaz", NormalizedStatus.REEMPLAZADO),
     (r"da[ñn]o", NormalizedStatus.NOVEDAD),
     (r"aver[ií]", NormalizedStatus.NOVEDAD),
     # Fallido / indemnización / no despachado
@@ -74,14 +78,14 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     # Entregado
     (r"entregad", NormalizedStatus.ENTREGADO),
     (r"recib.*destinatario", NormalizedStatus.ENTREGADO),
-    (r"reemplaz.*remesa", NormalizedStatus.ENTREGADO),
     # Recogido
     (r"recogid", NormalizedStatus.RECOGIDO),
     (r"recolect", NormalizedStatus.RECOGIDO),
     (r"recib.*remitente", NormalizedStatus.RECOGIDO),
-    # En ruta (último tramo)
+    # En TCC — paquete en instalaciones TCC esperando salir a entrega
+    (r"proceso.*entrega", NormalizedStatus.EN_TCC),
+    # En ruta (último tramo — mensajero en camino al destinatario)
     (r"en.*ruta", NormalizedStatus.EN_RUTA),
-    (r"proceso.*entrega", NormalizedStatus.EN_RUTA),
     (r"mensajer", NormalizedStatus.EN_RUTA),
     (r"reparto", NormalizedStatus.EN_RUTA),
     (r"salida.*entrega", NormalizedStatus.EN_RUTA),
@@ -93,6 +97,9 @@ _NORMALIZATION_RULES: list[tuple[str, NormalizedStatus]] = [
     (r"en.*camino", NormalizedStatus.EN_TRANSITO),
     (r"despacho", NormalizedStatus.EN_TRANSITO),
     (r"proceso.*traslado", NormalizedStatus.EN_TRANSITO),
+    (r"instalaciones.*tcc.*destino", NormalizedStatus.EN_TRANSITO),
+    (r"centro.*operaci[oó]n.*destino", NormalizedStatus.EN_TRANSITO),
+    (r"centro.*operaci[oó]n.*tcc", NormalizedStatus.EN_TRANSITO),
     (r"aerolinea", NormalizedStatus.EN_TRANSITO),
     (r"nacionalizada", NormalizedStatus.EN_TRANSITO),
     (r"contin[uú]a.*destino", NormalizedStatus.EN_TRANSITO),
@@ -117,6 +124,25 @@ def normalize_status(raw_status: str) -> NormalizedStatus:
         if pattern.search(clean):
             return normalized
     return NormalizedStatus.DESCONOCIDO
+
+
+def effective_status(
+    current_status: str | None,
+    current_status_raw: str | None = None,
+    default: str | NormalizedStatus = NormalizedStatus.DESCONOCIDO,
+) -> str:
+    """Retorna el estado usable para APIs/reportes cuando hay raw TCC."""
+    status = (current_status or "").strip()
+    if status and status != NormalizedStatus.DESCONOCIDO:
+        return status
+
+    raw_status = normalize_status(current_status_raw or "")
+    if raw_status != NormalizedStatus.DESCONOCIDO:
+        return raw_status.value
+
+    if isinstance(default, NormalizedStatus):
+        return default.value
+    return default
 
 
 def is_terminal(status: str | NormalizedStatus) -> bool:

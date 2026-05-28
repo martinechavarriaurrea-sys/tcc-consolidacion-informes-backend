@@ -178,6 +178,15 @@ class ExcelService:
         report_date: date,
     ) -> Path:
         """Genera el Excel del reporte diario y lo guarda en output_path."""
+        # Ordenar por fecha_despacho DESC (mismo orden que PDF); sin fecha al final
+        rows = sorted(
+            rows,
+            key=lambda r: (
+                r.shipping_date is None,
+                -(r.shipping_date.toordinal() if r.shipping_date else 0),
+            ),
+        )
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Reporte Diario"

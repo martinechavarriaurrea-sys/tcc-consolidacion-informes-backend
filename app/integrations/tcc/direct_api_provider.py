@@ -18,7 +18,7 @@ from app.integrations.tcc.base import (
     build_fetch_error,
     build_tracking_event,
 )
-from app.utils.status_normalizer import normalize_status
+from app.utils.status_normalizer import NormalizedStatus, normalize_status
 
 logger = get_logger(__name__)
 
@@ -87,6 +87,7 @@ def _parse_date(raw: str | None) -> datetime | None:
         "%Y-%m-%dT%H:%M:%S.%f%z",
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
         "%d/%m/%Y %I:%M:%S %p",
         "%d/%m/%Y",
     ]:
@@ -221,18 +222,25 @@ class TCCDirectApiProvider(TrackingProvider):
 
             from datetime import timezone
             latest = max(events, key=_sort_key, default=None)
+            current_status_normalized = estado_norm
+            if (
+                current_status_normalized == NormalizedStatus.DESCONOCIDO.value
+                and latest
+                and latest.status_normalized != NormalizedStatus.DESCONOCIDO.value
+            ):
+                current_status_normalized = latest.status_normalized
 
             logger.info(
                 "tcc_direct_api_success",
                 tracking=tracking,
-                estado=estado_norm,
+                estado=current_status_normalized,
                 events=len(events),
             )
 
             return TrackingResult(
                 tracking_number=tracking,
                 current_status_raw=estado_raw,
-                current_status_normalized=estado_norm,
+                current_status_normalized=current_status_normalized,
                 current_status_at=_strip_tz(latest.event_at) if latest else None,
                 client_name=client_name,
                 destination=destination,
