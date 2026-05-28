@@ -214,6 +214,12 @@ class PdfService:
                        output_path: Path, generated_at: datetime) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Ordenar por fecha_despacho DESC (mas nuevas arriba); sin fecha al final
+        rows = sorted(
+            rows,
+            key=lambda r: (r.shipping_date is None, -(r.shipping_date.toordinal() if r.shipping_date else 0)),
+        )
+
         period = f"{fecha_inicio.strftime('%d/%m/%Y')}  al  {fecha_fin.strftime('%d/%m/%Y')}"
 
         doc = SimpleDocTemplate(str(output_path), pagesize=A4,
@@ -238,8 +244,8 @@ class PdfService:
         story.append(Spacer(1, 0.6*cm))
 
         W   = A4[0] - 4*cm
-        hdrs = ["# Guia", "Cliente", "Asesor", "Estado", "Ult. Actualizacion", "Dias"]
-        cws  = [W*.13, W*.24, W*.18, W*.20, W*.18, W*.07]
+        hdrs = ["# Guia", "Cliente", "Asesor", "Estado", "F. Despacho", "Dias Transito"]
+        cws  = [W*.13, W*.24, W*.18, W*.20, W*.14, W*.11]
 
         rows_data   = []
         status_keys = []
@@ -250,8 +256,8 @@ class PdfService:
                 r.client_name or "—",
                 r.advisor_name,
                 txt,
-                r.last_event_at.strftime("%d/%m/%Y %H:%M") if r.last_event_at else "—",
-                str(int(r.days_without_movement or 0)),
+                r.shipping_date.strftime("%d/%m/%Y") if r.shipping_date else "—",
+                str(r.days_in_transit) if r.days_in_transit is not None else "—",
             ])
             status_keys.append(r.current_status)
 
@@ -272,6 +278,12 @@ class PdfService:
                        cycle_label: str, report_date: date,
                        generated_at: datetime) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Ordenar por fecha_despacho DESC (mas nuevas arriba); sin fecha al final
+        rows = sorted(
+            rows,
+            key=lambda r: (r.shipping_date is None, -(r.shipping_date.toordinal() if r.shipping_date else 0)),
+        )
 
         period = f"{report_date.strftime('%d/%m/%Y')} -Ciclo {cycle_label}"
         doc = SimpleDocTemplate(str(output_path), pagesize=A4,

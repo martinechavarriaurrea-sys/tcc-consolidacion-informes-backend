@@ -5,11 +5,13 @@
 4. Actualiza estado en shipment
 5. Marca entregadas / lanza alertas
 6. Registra la ejecucion en tracking_runs
+7. Detecta guias reemplazadas y crea automaticamente el nuevo registro
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,8 +25,12 @@ from app.models.tracking_run import TrackingRun
 from app.repositories.shipment_repository import ShipmentRepository
 from app.repositories.tracking_event_repository import TrackingEventRepository
 from app.repositories.tracking_run_repository import TrackingRunRepository
+from app.services.alert_service import AlertService
 from app.utils.date_utils import utcnow
 from app.utils.status_normalizer import NormalizedStatus, normalize_status
+
+# Detecta "Reemplazada 472190991" o "Reemplazado por 472190991"
+_REPLACEMENT_RE = re.compile(r"reemplaz[a-z]*\s+(?:por\s+)?(\d{6,12})", re.IGNORECASE)
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -101,9 +107,9 @@ class TrackingService:
 
     async def _process_one(self, shipment: Shipment, provider) -> tuple[bool, bool]:
         result: IntegrationResult = await provider.fetch(shipment.tracking_number)
-        return await self.apply_result(shipment, result)
+        return await self.apply_result(shipment, result, provider=provider)
 
-    async def apply_result(self, shipment: Shipment, result: IntegrationResult) -> tuple[bool, bool]:
+    async def apply_result(self, shipment: Shipment, result: IntegrationResult, *, provider=None) -> tuple[bool, bool]:
         if not result.fetch_success or not result.events:
             logger.warning(
                 "tracking_fetch_failed",
@@ -130,6 +136,11 @@ class TrackingService:
                 payload_snapshot=event_data.payload_snapshot or result.payload_snapshot or None,
             )
             await self.event_repo.add(event)
+            was_updated = True
+
+        # Autocompletar fecha de despacho desde TCC si aún no está registrada
+        if shipment.shipping_date is None and result.shipping_date:
+            shipment.shipping_date = result.shipping_date
             was_updated = True
 
         latest = result.latest_event
@@ -163,6 +174,50 @@ class TrackingService:
             if new_status_norm == NormalizedStatus.ENTREGADO and not shipment.delivered_at:
                 shipment.delivered_at = _naive(new_status_at)
                 shipment.is_active = False
+                await AlertService(self.session).resolve_all_for_shipment(shipment.id)
                 logger.info("shipment_delivered", tracking=shipment.tracking_number)
 
+            # Detectar reemplazo de guía por TCC
+            replacement_match = _REPLACEMENT_RE.search(new_status_raw or "")
+            if replacement_match and shipment.is_active:
+                new_number = replacement_match.group(1)
+                await self._handle_replacement(shipment, new_number, provider=provider)
+                was_updated = True
+
         return True, was_updated
+
+    async def _handle_replacement(self, shipment: Shipment, new_tracking_number: str, *, provider=None) -> None:
+        """Actualiza el número de guía en el mismo registro y consulta TCC con el número nuevo.
+        Mantiene cliente, asesor y fecha de despacho intactos."""
+        old_number = shipment.tracking_number
+
+        # Si el número nuevo ya existe como registro separado, fusionar: usar ese registro
+        existing = await self.shipment_repo.get_by_tracking_number(new_tracking_number)
+        if existing:
+            # Ya rastreado por separado — no duplicar, solo cerrar el viejo
+            shipment.is_active = False
+            shipment.closed_at = utcnow()
+            shipment.current_status = NormalizedStatus.REEMPLAZADO
+            shipment.updated_at = utcnow()
+            await AlertService(self.session).resolve_all_for_shipment(shipment.id)
+            logger.info("shipment_replaced_already_exists", old=old_number, existing=new_tracking_number)
+            return
+
+        # Actualizar el número de guía en el mismo registro (mantiene cliente/asesor/fecha)
+        shipment.tracking_number = new_tracking_number
+        shipment.is_active = True
+        shipment.current_status = "registrado"
+        shipment.current_status_raw = None
+        shipment.current_status_at = None
+        shipment.updated_at = utcnow()
+        await AlertService(self.session).resolve_all_for_shipment(shipment.id)
+        logger.info("shipment_number_updated", old=old_number, new=new_tracking_number)
+
+        # Consultar TCC inmediatamente con el número nuevo para obtener su estado real
+        if provider:
+            try:
+                new_result: IntegrationResult = await provider.fetch(new_tracking_number)
+                if new_result.fetch_success and new_result.events:
+                    await self.apply_result(shipment, new_result)
+            except Exception as exc:
+                logger.warning("replacement_tcc_fetch_failed", new=new_tracking_number, exc=str(exc))

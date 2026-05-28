@@ -461,6 +461,28 @@ def test_api_normalize_payload_all_missing_fields_returns_nones():
     assert result["events_raw"] == []
 
 
+def test_direct_api_parses_tcc_destination_facility_as_in_transit():
+    from app.integrations.tcc.direct_api_provider import _parse_estado
+
+    assert _parse_estado("Envio En Instalaciones Tcc Destino") == "en_transito"
+
+
+def test_direct_api_parses_replaced_waybill_as_novedad():
+    from app.integrations.tcc.direct_api_provider import _parse_estado
+
+    assert _parse_estado("Reemplazada 472200530") == "novedad"
+
+
+def test_direct_api_parses_iso_date_without_time():
+    from app.integrations.tcc.direct_api_provider import _parse_date
+
+    parsed = _parse_date("2026-04-29")
+    assert parsed is not None
+    assert parsed.year == 2026
+    assert parsed.month == 4
+    assert parsed.day == 29
+
+
 # ─── TCCApiProvider — fetch con HTTP mockeado ─────────────────────────────────
 
 

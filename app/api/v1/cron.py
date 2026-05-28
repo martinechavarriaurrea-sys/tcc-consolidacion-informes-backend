@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -14,7 +14,6 @@ from app.core.logging import get_logger
 from app.integrations.tcc.base import TrackingEventData, TrackingResult
 from app.jobs.tracking_job import (
     job_check_alerts,
-    job_check_alerts_data,
     job_cleanup_old_guias,
     job_daily_cycle,
     job_daily_report_only,
@@ -63,6 +62,7 @@ class CronTrackingResultPayload(BaseModel):
     destination: str | None = None
     package_type: str | None = None
     client_name: str | None = None
+    shipping_date: date | None = None
     events: list[CronTrackingEventPayload] = Field(default_factory=list)
     payload_snapshot: dict[str, Any] = Field(default_factory=dict)
     fetch_success: bool = False
@@ -78,6 +78,7 @@ class CronTrackingResultPayload(BaseModel):
             destination=self.destination,
             package_type=self.package_type,
             client_name=self.client_name,
+            shipping_date=self.shipping_date,
             events=[event.to_event_data() for event in self.events],
             payload_snapshot=self.payload_snapshot,
             fetch_success=self.fetch_success,
@@ -296,16 +297,6 @@ async def alerts_dispatch(authorization: str | None = Header(default=None)):
     await job_check_alerts()
     logger.info("cron_alerts_dispatch_done")
     return {"status": "completed", "jobs": ["alerts"]}
-
-
-@router.get("/alert-data")
-async def alert_data_dispatch(authorization: str | None = Header(default=None)):
-    """Detecta alertas 72h, las registra en BD y retorna datos para que GitHub Actions envie email."""
-    await _verify_cron_authorization(authorization)
-    logger.info("cron_alert_data_start")
-    alerts = await job_check_alerts_data()
-    logger.info("cron_alert_data_done", count=len(alerts))
-    return {"status": "completed", "new_alerts": alerts, "count": len(alerts)}
 
 
 @router.get("/weekly")

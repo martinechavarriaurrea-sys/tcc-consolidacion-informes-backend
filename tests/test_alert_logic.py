@@ -59,6 +59,8 @@ def test_hours_since_naive_dt():
     ("Devuelto al remitente", NormalizedStatus.DEVUELTO),
     ("En ruta de entrega", NormalizedStatus.EN_RUTA),
     ("Registrado en sistema", NormalizedStatus.REGISTRADO),
+    ("Envio En Instalaciones Tcc Destino", NormalizedStatus.EN_TRANSITO),
+    ("Reemplazada 472200530", NormalizedStatus.NOVEDAD),
     ("", NormalizedStatus.DESCONOCIDO),
     ("Estado completamente desconocido XYZ", NormalizedStatus.DESCONOCIDO),
 ])

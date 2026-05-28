@@ -9,16 +9,10 @@ tiempo de consulta de todas las guias.
 from __future__ import annotations
 
 import asyncio
-import base64
 import os
-import smtplib
-import ssl
 import sys
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Any
 
 import httpx
@@ -34,79 +28,6 @@ logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT = int(os.getenv("TCC_WORKER_CONCURRENCY", "5"))
 PAGE_SIZE = 200
-
-
-def _send_smtp_email(
-    pdf_bytes: bytes,
-    pdf_filename: str,
-    subject: str,
-    body_html: str,
-) -> bool:
-    if os.getenv("SKIP_SMTP_EMAIL", "").strip().lower() in {"1", "true", "yes"}:
-        logger.info("github_worker_email_deferred_to_local_outlook filename=%s", pdf_filename)
-        return False
-
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    smtp_host = os.getenv("SMTP_HOST", "smtp.office365.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    recipients = [r.strip() for r in os.getenv("EMAIL_RECIPIENTS", "echavarriam@asteco.com.co,jmunoz@asteco.com.co,adiaz@asteco.com.co,bvillada@asteco.com.co").split(",")]
-
-    if not smtp_user or not smtp_password:
-        logger.warning("github_worker_smtp_not_configured")
-        return False
-
-    msg = MIMEMultipart()
-    msg["Subject"] = subject
-    msg["From"] = smtp_user
-    msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText(body_html, "html", "utf-8"))
-
-    part = MIMEApplication(pdf_bytes, Name=pdf_filename)
-    part["Content-Disposition"] = f'attachment; filename="{pdf_filename}"'
-    msg.attach(part)
-
-    context = ssl.create_default_context()
-    with smtplib.SMTP(smtp_host, smtp_port) as smtp:
-        smtp.ehlo()
-        smtp.starttls(context=context)
-        smtp.login(smtp_user, smtp_password)
-        smtp.sendmail(smtp_user, recipients, msg.as_bytes())
-
-    logger.info(
-        "github_worker_email_sent recipients=%s host=%s filename=%s",
-        recipients,
-        smtp_host,
-        pdf_filename,
-    )
-    return True
-
-
-def _daily_body_html(report_date: str, cycle_label: str) -> str:
-    cycle_display = f"{cycle_label[:2]}:{cycle_label[2:]}"
-    return f"""<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
-<div style="border-left:4px solid #1B3A6B;padding-left:16px;margin-bottom:16px">
-  <h2 style="color:#1B3A6B;margin:0">Seguimiento de Guias TCC</h2>
-  <p style="color:#666;margin:4px 0">{report_date} - Ciclo {cycle_display}</p>
-</div>
-<p>Se adjunta el PDF con el detalle del ciclo.</p>
-<p style="color:#888;font-size:12px;margin-top:32px">
-  Generado automaticamente por el sistema TCC ASTECO.
-</p>
-</body></html>"""
-
-
-def _weekly_body_html(period: str) -> str:
-    return f"""<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
-<div style="border-left:4px solid #1B3A6B;padding-left:16px;margin-bottom:16px">
-  <h2 style="color:#1B3A6B;margin:0">Seguimiento de Guias TCC - Consolidado Semanal</h2>
-  <p style="color:#666;margin:4px 0">Semana: {period}</p>
-</div>
-<p>Se adjunta el PDF con el consolidado de la semana.</p>
-<p style="color:#888;font-size:12px;margin-top:32px">
-  Generado automaticamente por el sistema TCC ASTECO.
-</p>
-</body></html>"""
 
 
 def _jsonable(value: Any) -> Any:
@@ -181,9 +102,11 @@ async def run_daily(cycle_label: str) -> None:
         )
 
         results = await _fetch_tcc_results(tracking_numbers)
+        # cycle_label vacío = solo tracking, sin reporte
+        report_cycle = cycle_label if cycle_label in {"0700", "1200", "1600"} else None
         payload = {
-            "run_type": f"github_actions_{cycle_label}",
-            "cycle_label": cycle_label,
+            "run_type": f"github_actions_{cycle_label or 'tracking'}",
+            "cycle_label": report_cycle,
             "results": results,
         }
 
@@ -201,37 +124,13 @@ async def run_daily(cycle_label: str) -> None:
             data.get("checked"),
         )
 
-        # ── NO CRÍTICO: email — nunca debe tumbar el job ────────────────────
-        try:
-            pdf_b64 = data.get("pdf_b64")
-            pdf_filename = data.get("pdf_filename") or f"reporte_tcc_diario_{cycle_label}.pdf"
-            if pdf_b64:
-                report_date = datetime.utcnow().strftime("%d/%m/%Y")
-                body = _daily_body_html(report_date, cycle_label)
-                sent = _send_smtp_email(base64.b64decode(pdf_b64), pdf_filename, "Seguimiento TCC", body)
-                logger.info("github_worker_daily_email sent=%s cycle=%s", sent, cycle_label)
-            else:
-                logger.warning("github_worker_no_pdf cycle=%s", cycle_label)
-
-            weekly_pdf_b64 = data.get("weekly_pdf_b64")
-            if weekly_pdf_b64:
-                weekly_filename = data.get("weekly_pdf_filename") or "reporte_tcc_semanal.pdf"
-                weekly_period = data.get("weekly_period", "")
-                body = _weekly_body_html(weekly_period)
-                sent = _send_smtp_email(base64.b64decode(weekly_pdf_b64), weekly_filename, "Seguimiento TCC", body)
-                logger.info("github_worker_weekly_email sent=%s", sent)
-        except Exception as exc:
-            logger.error(f"github_worker_email_error (no critico): {exc}")
-
 
 async def main() -> None:
-    if len(sys.argv) != 3 or sys.argv[1] != "daily":
-        raise SystemExit("Uso: python scripts/github_tracking_worker.py daily <0700|1200|1600>")
+    if len(sys.argv) < 2 or sys.argv[1] != "daily":
+        raise SystemExit("Uso: python scripts/github_tracking_worker.py daily [<0700|1200|1600>]")
 
-    cycle_label = sys.argv[2]
-    if cycle_label not in {"0700", "1200", "1600"}:
-        raise SystemExit("cycle_label debe ser 0700, 1200 o 1600")
-
+    # cycle_label vacío o ausente = solo tracking, sin reporte
+    cycle_label = sys.argv[2] if len(sys.argv) > 2 else ""
     await run_daily(cycle_label)
 
 

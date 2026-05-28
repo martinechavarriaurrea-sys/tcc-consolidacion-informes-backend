@@ -15,7 +15,7 @@ from app.repositories.shipment_repository import ShipmentRepository
 from app.schemas.dashboard import AdvisorBreakdown, DashboardSummary, StatusBreakdown
 from app.services.alert_service import AlertService
 from app.utils.date_utils import start_of_today, utcnow, week_boundaries
-from app.utils.status_normalizer import ISSUE_STATUSES, NormalizedStatus
+from app.utils.status_normalizer import ISSUE_STATUSES, NormalizedStatus, effective_status
 
 logger = get_logger(__name__)
 
@@ -44,19 +44,17 @@ class ReportService:
         )
         delivered_today = len(list(delivered_today_result.scalars().all()))
 
-        issue_statuses_str = [s.value for s in ISSUE_STATUSES]
-        with_issues_result = await self.session.execute(
-            select(Shipment).where(
-                Shipment.is_active == True,  # noqa: E712
-                Shipment.current_status.in_(issue_statuses_str),
-            )
-        )
-        total_issues = len(list(with_issues_result.scalars().all()))
-
         active_count_result = await self.session.execute(
             select(Shipment).where(Shipment.is_active == True)  # noqa: E712
         )
-        total_active = len(list(active_count_result.scalars().all()))
+        active_shipments = list(active_count_result.scalars().all())
+        issue_statuses_str = {s.value for s in ISSUE_STATUSES}
+        total_issues = sum(
+            1
+            for shipment in active_shipments
+            if effective_status(shipment.current_status, shipment.current_status_raw) in issue_statuses_str
+        )
+        total_active = len(active_shipments)
 
         return DashboardSummary(
             total_active=total_active,

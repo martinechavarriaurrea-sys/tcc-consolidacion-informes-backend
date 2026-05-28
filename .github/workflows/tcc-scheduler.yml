@@ -2,10 +2,15 @@ name: TCC Scheduler
 
 on:
   schedule:
-    # America/Bogota is UTC-5 year round.
-    - cron: "0 12 * * *"      # 07:00 Bogota
-    - cron: "0 17 * * *"      # 12:00 Bogota
-    - cron: "0 21 * * *"      # 16:00 Bogota
+    # America/Bogota is UTC-5 year round. Tracking cada 2h, reportes a las 07/12/16.
+    - cron: "0 12 * * *"      # 07:00 Bogota — tracking + reporte 0700
+    - cron: "0 14 * * *"      # 09:00 Bogota — solo tracking
+    - cron: "0 16 * * *"      # 11:00 Bogota — solo tracking
+    - cron: "0 17 * * *"      # 12:00 Bogota — tracking + reporte 1200
+    - cron: "0 18 * * *"      # 13:00 Bogota — solo tracking
+    - cron: "0 20 * * *"      # 15:00 Bogota — solo tracking
+    - cron: "0 21 * * *"      # 16:00 Bogota — tracking + reporte 1600
+    - cron: "0 22 * * *"      # 17:00 Bogota — solo tracking
     - cron: "0 11 * * 1"      # cleanup, Monday 06:00 Bogota
   workflow_dispatch:
     inputs:
@@ -17,7 +22,6 @@ on:
         options:
           - daily
           - weekly
-          - alerts
           - cleanup
       cycle:
         description: "Daily cycle"
@@ -62,10 +66,6 @@ jobs:
                 echo "path=/api/cron/weekly" >> "$GITHUB_OUTPUT"
                 echo "job=weekly" >> "$GITHUB_OUTPUT"
                 ;;
-              alerts)
-                echo "path=/api/cron/alerts" >> "$GITHUB_OUTPUT"
-                echo "job=alerts" >> "$GITHUB_OUTPUT"
-                ;;
               cleanup)
                 echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
                 echo "job=cleanup" >> "$GITHUB_OUTPUT"
@@ -89,6 +89,12 @@ jobs:
               echo "path=/api/cron/daily-dispatch?cycle=1600" >> "$GITHUB_OUTPUT"
               echo "job=daily" >> "$GITHUB_OUTPUT"
               echo "cycle=1600" >> "$GITHUB_OUTPUT"
+              ;;
+            "0 14 * * *" | "0 16 * * *" | "0 18 * * *" | "0 20 * * *" | "0 22 * * *")
+              # Solo tracking — sin reporte
+              echo "path=" >> "$GITHUB_OUTPUT"
+              echo "job=daily" >> "$GITHUB_OUTPUT"
+              echo "cycle=" >> "$GITHUB_OUTPUT"
               ;;
             "0 11 * * 1")
               echo "path=/api/cron/cleanup" >> "$GITHUB_OUTPUT"
@@ -116,18 +122,18 @@ jobs:
           echo "token=${token}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout backend worker
-        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
+        if: steps.target.outputs.job == 'daily'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
+        if: steps.target.outputs.job == 'daily'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install backend dependencies
-        if: steps.target.outputs.job == 'daily' || steps.target.outputs.job == 'alerts'
+        if: steps.target.outputs.job == 'daily'
         shell: bash
         run: |
           set -euo pipefail
@@ -144,21 +150,6 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/github_tracking_worker.py daily "${{ steps.target.outputs.cycle }}"
-
-      - name: Run alert email worker (verifica 72h + envia email si hay alertas)
-        if: steps.target.outputs.job == 'alerts'
-        shell: bash
-        env:
-          BACKEND_URL: ${{ env.BACKEND_URL }}
-          CRON_TOKEN: ${{ steps.oidc.outputs.token }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
-        run: |
-          set -euo pipefail
-          python scripts/alert_email_worker.py
 
       - name: Call backend cron endpoint (weekly / cleanup)
         if: steps.target.outputs.job == 'weekly' || steps.target.outputs.job == 'cleanup'
