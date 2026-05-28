@@ -49,6 +49,7 @@ def _to_resumen(shipment: Shipment, tiene_alerta: bool) -> dict:
             shipment.current_status_raw,
             default=NormalizedStatus.REGISTRADO,
         ),
+        "estado_raw": shipment.current_status_raw,
         "fecha_ultima_actualizacion": shipment.updated_at.isoformat() if shipment.updated_at else None,
         "fecha_despacho": shipment.shipping_date.isoformat() if shipment.shipping_date else None,
         "dias_en_transito": _dias_en_transito(shipment),
