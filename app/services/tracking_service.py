@@ -138,6 +138,11 @@ class TrackingService:
             await self.event_repo.add(event)
             was_updated = True
 
+        # Autocompletar fecha de despacho desde TCC si aún no está registrada
+        if shipment.shipping_date is None and result.shipping_date:
+            shipment.shipping_date = result.shipping_date
+            was_updated = True
+
         latest = result.latest_event
         if latest:
             new_status_raw = result.current_status_raw or latest.status_raw

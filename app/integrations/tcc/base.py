@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -62,6 +62,7 @@ class TrackingResult:
     destination: str | None = None
     package_type: str | None = None
     client_name: str | None = None
+    shipping_date: date | None = None
     events: list[TrackingEventData] = field(default_factory=list)
     payload_snapshot: dict[str, Any] = field(default_factory=dict)
     fetch_success: bool = False
