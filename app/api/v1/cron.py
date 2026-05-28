@@ -1,5 +1,5 @@
 import base64
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -62,6 +62,7 @@ class CronTrackingResultPayload(BaseModel):
     destination: str | None = None
     package_type: str | None = None
     client_name: str | None = None
+    shipping_date: date | None = None
     events: list[CronTrackingEventPayload] = Field(default_factory=list)
     payload_snapshot: dict[str, Any] = Field(default_factory=dict)
     fetch_success: bool = False
@@ -77,6 +78,7 @@ class CronTrackingResultPayload(BaseModel):
             destination=self.destination,
             package_type=self.package_type,
             client_name=self.client_name,
+            shipping_date=self.shipping_date,
             events=[event.to_event_data() for event in self.events],
             payload_snapshot=self.payload_snapshot,
             fetch_success=self.fetch_success,
