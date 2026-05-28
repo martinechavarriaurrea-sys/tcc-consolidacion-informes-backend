@@ -102,9 +102,11 @@ async def run_daily(cycle_label: str) -> None:
         )
 
         results = await _fetch_tcc_results(tracking_numbers)
+        # cycle_label vacío = solo tracking, sin reporte
+        report_cycle = cycle_label if cycle_label in {"0700", "1200", "1600"} else None
         payload = {
-            "run_type": f"github_actions_{cycle_label}",
-            "cycle_label": cycle_label,
+            "run_type": f"github_actions_{cycle_label or 'tracking'}",
+            "cycle_label": report_cycle,
             "results": results,
         }
 
@@ -124,13 +126,11 @@ async def run_daily(cycle_label: str) -> None:
 
 
 async def main() -> None:
-    if len(sys.argv) != 3 or sys.argv[1] != "daily":
-        raise SystemExit("Uso: python scripts/github_tracking_worker.py daily <0700|1200|1600>")
+    if len(sys.argv) < 2 or sys.argv[1] != "daily":
+        raise SystemExit("Uso: python scripts/github_tracking_worker.py daily [<0700|1200|1600>]")
 
-    cycle_label = sys.argv[2]
-    if cycle_label not in {"0700", "1200", "1600"}:
-        raise SystemExit("cycle_label debe ser 0700, 1200 o 1600")
-
+    # cycle_label vacío o ausente = solo tracking, sin reporte
+    cycle_label = sys.argv[2] if len(sys.argv) > 2 else ""
     await run_daily(cycle_label)
 
 
