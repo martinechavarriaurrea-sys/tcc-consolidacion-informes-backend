@@ -33,6 +33,7 @@ from app.jobs.tracking_job import (
 )
 from app.models.report_file import ReportFile
 from app.utils.date_utils import utcnow, week_boundaries
+from app.utils.status_normalizer import effective_status
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 logger = get_logger(__name__)
@@ -123,27 +124,34 @@ async def export_weekly_report(
 async def export_range_report(
     fecha_inicio: date = Query(..., description="Fecha inicio YYYY-MM-DD"),
     fecha_fin: date = Query(..., description="Fecha fin YYYY-MM-DD"),
+    format: FormatParam = Query(default="pdf"),
     session: AsyncSession = Depends(get_db),
 ):
-    """Genera PDF con todas las guías que tuvieron actividad en el rango indicado."""
-    from datetime import datetime, timedelta
+    """Genera PDF o Excel con todas las guías que tuvieron actividad en el rango indicado."""
+    from datetime import datetime
     from app.models.shipment import Shipment
     from sqlalchemy import or_
+    from app.utils.date_utils import count_days_excluding_sundays
 
     if fecha_fin < fecha_inicio:
         raise HTTPException(status_code=400, detail="fecha_fin debe ser mayor o igual a fecha_inicio.")
     if (fecha_fin - fecha_inicio).days > 365:
         raise HTTPException(status_code=400, detail="El rango no puede superar 365 días.")
 
-    inicio_dt = datetime.combine(fecha_inicio, datetime.min.time())
-    fin_dt = datetime.combine(fecha_fin, datetime.max.time())
+    from datetime import timezone as _tz
+    inicio_dt = datetime.combine(fecha_inicio, datetime.min.time()).replace(tzinfo=_tz.utc)
+    fin_dt    = datetime.combine(fecha_fin,    datetime.max.time()).replace(tzinfo=_tz.utc)
 
+    # Guías que estuvieron activas durante el rango:
+    # se registraron antes del fin del rango
+    # Y (siguen activas  O  se cerraron/entregaron después del inicio del rango)
     result = await session.execute(
         select(Shipment).where(
+            Shipment.first_seen_at <= fin_dt,
             or_(
-                Shipment.first_seen_at.between(inicio_dt, fin_dt),
-                Shipment.delivered_at.between(inicio_dt, fin_dt),
-                Shipment.updated_at.between(inicio_dt, fin_dt),
+                Shipment.is_active == True,          # noqa: E712
+                Shipment.delivered_at >= inicio_dt,
+                Shipment.closed_at    >= inicio_dt,
             )
         ).order_by(Shipment.advisor_name, Shipment.client_name)
     )
@@ -164,13 +172,23 @@ async def export_range_report(
             now_naive = now.replace(tzinfo=None) if now.tzinfo else now
             delta = now_naive - sat
             hrs = delta.total_seconds() / 3600
+
+        shipping_date = s.shipping_date
+        if isinstance(shipping_date, datetime):
+            shipping_date = shipping_date.date()
+
+        days_in_transit = None
+        if isinstance(shipping_date, date):
+            end = s.delivered_at.date() if s.delivered_at else fecha_fin
+            days_in_transit = count_days_excluding_sundays(shipping_date, end)
+
         rows.append(DailyReportRow(
             query_date=fecha_inicio,
             query_time=now.strftime("%H:%M"),
             tracking_number=s.tracking_number,
             advisor_name=s.advisor_name,
             client_name=s.client_name or "",
-            current_status=s.current_status or "",
+            current_status=effective_status(s.current_status, s.current_status_raw, default=""),
             current_status_raw=s.current_status_raw or "",
             last_event_at=s.current_status_at,
             hours_without_movement=round(hrs, 1) if hrs else None,
@@ -178,17 +196,27 @@ async def export_range_report(
             is_delivered=bool(s.delivered_at),
             is_alert=False,
             observations="",
+            shipping_date=shipping_date if isinstance(shipping_date, date) else None,
+            days_in_transit=days_in_transit,
         ))
 
     inicio_str = fecha_inicio.strftime("%Y-%m-%d")
     fin_str    = fecha_fin.strftime("%Y-%m-%d")
-    filename   = f"informe_tcc_{inicio_str}_al_{fin_str}.pdf"
-    path       = settings.reports_daily_path / filename
+    cycle_label = now.strftime("%H%M")
 
-    _pdf_svc.generate_range(rows, fecha_inicio, fecha_fin, path, now)
+    if format == "xlsx":
+        filename = f"informe_tcc_{inicio_str}_al_{fin_str}.xlsx"
+        path = settings.reports_daily_path / filename
+        _excel_svc.generate_daily(rows, path, cycle_label, fecha_inicio)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        filename = f"informe_tcc_{inicio_str}_al_{fin_str}.pdf"
+        path = settings.reports_daily_path / filename
+        _pdf_svc.generate_range(rows, fecha_inicio, fecha_fin, path, now)
+        media_type = "application/pdf"
 
-    logger.info("range_report_generated", rows=len(rows), inicio=inicio_str, fin=fin_str)
-    return FileResponse(path=str(path), filename=filename, media_type="application/pdf")
+    logger.info("range_report_generated", format=format, rows=len(rows), inicio=inicio_str, fin=fin_str)
+    return FileResponse(path=str(path), filename=filename, media_type=media_type)
 
 
 @router.post("/trigger/{job_name}")
@@ -250,77 +278,3 @@ async def report_history(
         for f in files
     ]
 
-
-@router.get("/pending")
-async def get_pending_report(
-    cycle: str = Query(..., description="Ciclo del reporte: 0700, 1200 o 1600"),
-    authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_db),
-):
-    """
-    Retorna el reporte PDF pendiente de envio (email_sent=False) para el ciclo indicado.
-    Usado por scripts/send_email_graph.py desde GitHub Actions.
-    Retorna 404 si ya fue enviado o no existe aun — la ausencia no es un error.
-    """
-    from app.api.v1.cron import _verify_cron_authorization
-    await _verify_cron_authorization(authorization)
-
-    cutoff = utcnow() - timedelta(hours=12)
-    stmt = (
-        select(ReportFile)
-        .where(
-            ReportFile.report_type == "daily",
-            ReportFile.format == "pdf",
-            ReportFile.cycle_label == cycle,
-            ReportFile.email_sent == False,  # noqa: E712
-            ReportFile.content_b64.is_not(None),
-            ReportFile.generated_at >= cutoff,
-        )
-        .order_by(ReportFile.generated_at.desc())
-        .limit(1)
-    )
-    result = await session.execute(stmt)
-    report = result.scalar_one_or_none()
-
-    if report is None:
-        raise HTTPException(status_code=404, detail="No hay reporte pendiente para este ciclo.")
-
-    logger.info("pending_report_returned id=%s filename=%s cycle=%s", report.id, report.filename, cycle)
-    return {
-        "id": report.id,
-        "filename": report.filename,
-        "cycle_label": report.cycle_label,
-        "generated_at": report.generated_at.isoformat(),
-        "content_b64": report.content_b64,
-    }
-
-
-@router.patch("/{report_id}/mark_sent")
-async def mark_report_sent(
-    report_id: int,
-    authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_db),
-):
-    """
-    Marca un reporte como enviado por email.
-    Usado por scripts/send_email_graph.py para garantizar idempotencia.
-    """
-    from app.api.v1.cron import _verify_cron_authorization
-    await _verify_cron_authorization(authorization)
-
-    result = await session.execute(select(ReportFile).where(ReportFile.id == report_id))
-    report = result.scalar_one_or_none()
-
-    if report is None:
-        raise HTTPException(status_code=404, detail=f"Reporte {report_id} no encontrado.")
-
-    report.email_sent = True
-    report.email_sent_at = utcnow()
-    await session.commit()
-
-    logger.info("report_marked_sent_via_api id=%s filename=%s", report_id, report.filename)
-    return {
-        "id": report_id,
-        "email_sent": True,
-        "email_sent_at": report.email_sent_at.isoformat(),
-    }

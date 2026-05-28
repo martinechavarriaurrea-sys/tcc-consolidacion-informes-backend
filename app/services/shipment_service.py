@@ -25,6 +25,7 @@ class ShipmentService:
             client_name=data.client_name,
             package_type=data.package_type,
             destination=data.destination,
+            shipping_date=data.shipping_date,
             current_status="registrado",
             first_seen_at=utcnow(),
             is_active=True,

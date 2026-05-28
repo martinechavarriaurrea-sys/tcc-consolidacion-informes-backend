@@ -10,19 +10,19 @@ CICLO DIARIO (job_daily_cycle)
 4. Recolecta datos para el reporte
 5. Genera Excel + PDF
 6. Guarda metadata de archivos en report_files
-7. Envía correo con ambos adjuntos a destinatarios diarios
 
 CONSOLIDADO SEMANAL (job_weekly_report)
 ────────────────────────────────────────────────────────────────────────────
 Se ejecuta los lunes 07:00. Genera un consolidado de la semana ANTERIOR
 (lunes–domingo precedente). Incluye guías activas durante ese período y
-las entregadas en él. Genera Excel + PDF y envía a destinatarios semanales.
+las entregadas en él. Genera Excel + PDF.
 
 ALERTAS 72 HORAS (job_check_alerts)
 ────────────────────────────────────────────────────────────────────────────
 Corre cada 30 min. Detecta guías sin movimiento ≥72h. Solo genera alerta
 nueva si no hay una alerta abierta del mismo tipo para esa guía (anti-spam).
 Cuando la guía tiene movimiento, la alerta se marca resuelta.
+El estado se refleja en el dashboard — no se envían emails.
 """
 
 import base64
@@ -40,20 +40,12 @@ from app.models.tracking_event import ShipmentTrackingEvent
 from app.repositories.shipment_repository import ShipmentRepository
 from app.repositories.tracking_event_repository import TrackingEventRepository
 from app.services.alert_service import AlertService
-from app.services.email_service import (
-    ALERT_RECIPIENTS,
-    DAILY_RECIPIENTS,
-    WEEKLY_RECIPIENTS,
-    body_alert_72h,
-    body_daily_report,
-    body_weekly_report,
-    send_email,
-)
 from app.services.excel_service import DailyReportRow, ExcelService, WeeklyReportRow
 from app.services.pdf_service import PdfService
 from app.services.report_service import ReportService
 from app.services.tracking_service import TrackingService
 from app.utils.date_utils import count_days_excluding_sundays, hours_since, utcnow, week_boundaries
+from app.utils.status_normalizer import effective_status
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -149,6 +141,7 @@ async def _collect_daily_rows(
     rows: list[DailyReportRow] = []
 
     for shipment in all_shipments.values():
+        current_status = effective_status(shipment.current_status, shipment.current_status_raw)
         ref_dt = shipment.current_status_at or shipment.first_seen_at
         hrs = hours_since(ref_dt) if ref_dt else None
         days = hrs / 24 if hrs is not None else None
@@ -157,7 +150,7 @@ async def _collect_daily_rows(
         obs_parts = []
         if is_alert:
             obs_parts.append(f"Sin movimiento {hrs:.0f}h")
-        if shipment.current_status == "novedad":
+        if current_status == "novedad":
             obs_parts.append("Con novedad")
         if not shipment.is_active and shipment.delivered_at:
             obs_parts.append("Entregado en este ciclo")
@@ -178,7 +171,7 @@ async def _collect_daily_rows(
             tracking_number=shipment.tracking_number,
             advisor_name=shipment.advisor_name,
             client_name=shipment.client_name or "",
-            current_status=shipment.current_status,
+            current_status=current_status,
             current_status_raw=shipment.current_status_raw or "",
             last_event_at=shipment.current_status_at,
             hours_without_movement=round(hrs, 1) if hrs is not None else None,
@@ -217,6 +210,7 @@ async def _collect_weekly_rows(
     rows: list[WeeklyReportRow] = []
 
     for shipment in shipments:
+        current_status = effective_status(shipment.current_status, shipment.current_status_raw)
         # Eventos en la semana
         events_result = await session.execute(
             select(ShipmentTrackingEvent)
@@ -229,8 +223,8 @@ async def _collect_weekly_rows(
         )
         events = list(events_result.scalars().all())
 
-        first_status = events[0].status_normalized if events else shipment.current_status
-        last_status = events[-1].status_normalized if events else shipment.current_status
+        first_status = events[0].status_normalized if events else current_status
+        last_status = events[-1].status_normalized if events else current_status
         total_movements = len(events)
 
         # Alertas en la semana
@@ -248,7 +242,7 @@ async def _collect_weekly_rows(
         obs_parts = []
         if alert_count > 0:
             obs_parts.append(f"Alertas: {alert_count}")
-        if shipment.current_status == "novedad":
+        if current_status == "novedad":
             obs_parts.append("Con novedad")
 
         rows.append(WeeklyReportRow(
@@ -348,18 +342,7 @@ async def job_daily_cycle(cycle_label: str) -> None:
                 cycle_started_at=run.started_at,
             )
             if pdf_path:
-                html = body_daily_report(cycle_ts.strftime("%d/%m/%Y"), cycle_label)
-                sent = await send_email(to=DAILY_RECIPIENTS, subject="Seguimiento TCC",
-                                        body_html=html, attachments=[pdf_path])
-                if sent:
-                    from sqlalchemy import update
-
-                    await session.execute(
-                        update(ReportFile)
-                        .where(ReportFile.filename == pdf_path.name)
-                        .values(email_sent=True, email_sent_at=utcnow())
-                    )
-                logger.info("job_daily_report_generated", cycle=cycle_label, email_sent=sent)
+                logger.info("job_daily_report_generated", cycle=cycle_label)
             await session.commit()
             logger.info("job_daily_cycle_done", cycle=cycle_label, report_generated=pdf_path is not None)
             # _generate_daily_report already handles rows, files, DB registration, and email.
@@ -414,21 +397,8 @@ async def job_weekly_report() -> None:
                                     content_b64=base64.b64encode(pdf_path.read_bytes()).decode(),
                                     content_type="application/pdf")
 
-            html = body_weekly_report(week_start_str, week_end_str)
-            sent = await send_email(to=WEEKLY_RECIPIENTS, subject="Seguimiento TCC",
-                                    body_html=html, attachments=[pdf_path])
-            if sent:
-                from sqlalchemy import update
-
-                await session.execute(
-                    update(ReportFile)
-                    .where(ReportFile.filename == pdf_path.name)
-                    .values(email_sent=True, email_sent_at=utcnow())
-                )
-
             await session.commit()
-            logger.info("job_weekly_report_done", email_sent=sent, week_start=week_start_str,
-                        pdf=str(pdf_path))
+            logger.info("job_weekly_report_done", week_start=week_start_str, pdf=str(pdf_path))
 
         except Exception:
             logger.exception("job_weekly_report_error")
@@ -507,13 +477,13 @@ async def job_check_alerts_data() -> list[dict]:
 
 async def job_check_alerts() -> None:
     """
-    Detecta guías sin movimiento ≥72h y envía alerta por correo.
+    Detecta guías sin movimiento ≥72h y registra alertas en BD.
 
     POLÍTICA ANTI-SPAM
     ─────────────────────────────────────────────────────────────────────────
     - Solo se crea un AlertEvent por guía cuando no hay alerta abierta.
     - Si la guía vuelve a tener movimiento, la alerta se marca resuelta.
-    - No se envía correo si no hay alertas NUEVAS en este ciclo.
+    - El estado se refleja en el dashboard en tiempo real.
     - Referencia en código: AlertService._check_no_movement()
     """
     logger.info("job_check_alerts_start")
@@ -525,26 +495,7 @@ async def job_check_alerts() -> None:
             await session.commit()
 
             if new_alerts:
-                # Prepara info para el cuerpo del correo
-                stale = await alert_svc.get_shipments_without_movement()
-                shipments_info = [
-                    {
-                        "tracking_number": s.tracking_number,
-                        "advisor_name": s.advisor_name,
-                        "current_status": s.current_status,
-                        "hours": f"{hours_since(s.current_status_at or s.first_seen_at):.0f}",
-                    }
-                    for s in stale
-                ]
-
-                subject = "Seguimiento TCC"
-                html = body_alert_72h(shipments_info)
-                sent = await send_email(
-                    to=ALERT_RECIPIENTS,
-                    subject=subject,
-                    body_html=html,
-                )
-                logger.info("job_check_alerts_email_sent", new=len(new_alerts), sent=sent)
+                logger.info("job_check_alerts_new", new=len(new_alerts))
             else:
                 logger.info("job_check_alerts_no_new_alerts")
 
@@ -559,14 +510,14 @@ async def job_check_alerts() -> None:
 # ── Job: limpieza de guías entregadas hace más de 14 días ─────────────────────
 
 async def job_cleanup_old_guias() -> None:
-    """Elimina guías entregadas o cerradas hace más de 14 días."""
+    """Elimina guías entregadas o cerradas hace más de 35 días."""
     from datetime import timedelta
     from sqlalchemy import delete
     from app.models.tracking_event import ShipmentTrackingEvent
     from app.models.alert_event import AlertEvent
 
     logger.info("job_cleanup_start")
-    cutoff = utcnow() - timedelta(days=14)
+    cutoff = utcnow() - timedelta(days=35)
 
     async with AsyncSessionLocal() as session:
         try:

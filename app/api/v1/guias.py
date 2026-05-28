@@ -17,6 +17,7 @@ from app.schemas.shipment import ShipmentCreate
 from app.services.shipment_service import ShipmentService
 from app.services.tracking_service import TrackingService
 from app.utils.date_utils import utcnow
+from app.utils.status_normalizer import NormalizedStatus, effective_status
 
 router = APIRouter(prefix="/guias", tags=["guias"])
 
@@ -43,7 +44,11 @@ def _to_resumen(shipment: Shipment, tiene_alerta: bool) -> dict:
         "numero_guia": shipment.tracking_number,
         "asesor": shipment.advisor_name,
         "cliente": shipment.client_name,
-        "estado_actual": shipment.current_status or "registrado",
+        "estado_actual": effective_status(
+            shipment.current_status,
+            shipment.current_status_raw,
+            default=NormalizedStatus.REGISTRADO,
+        ),
         "fecha_ultima_actualizacion": shipment.updated_at.isoformat() if shipment.updated_at else None,
         "fecha_despacho": shipment.shipping_date.isoformat() if shipment.shipping_date else None,
         "dias_en_transito": _dias_en_transito(shipment),
@@ -64,7 +69,11 @@ def _to_detail(shipment: Shipment, alertas: list, historial: list) -> dict:
         "numero_guia": shipment.tracking_number,
         "asesor": shipment.advisor_name,
         "cliente": shipment.client_name,
-        "estado_actual": shipment.current_status or "registrado",
+        "estado_actual": effective_status(
+            shipment.current_status,
+            shipment.current_status_raw,
+            default=NormalizedStatus.REGISTRADO,
+        ),
         "estado_raw": shipment.current_status_raw,
         "fecha_creacion": shipment.first_seen_at.isoformat() if shipment.first_seen_at else None,
         "fecha_ultima_actualizacion": shipment.updated_at.isoformat() if shipment.updated_at else None,
@@ -235,6 +244,31 @@ async def cerrar_guia(guia_id: str, db: AsyncSession = Depends(get_db)):
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Guía no encontrada.")
     return _to_detail(shipment, [], [])
+
+
+@router.delete("/{guia_id}", status_code=204)
+async def delete_guia(guia_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        sid = int(guia_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Guía no encontrada.")
+
+    result = await db.execute(select(Shipment).where(Shipment.id == sid))
+    shipment = result.scalar_one_or_none()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Guía no encontrada.")
+
+    await db.execute(
+        __import__("sqlalchemy", fromlist=["delete"]).delete(AlertEvent).where(AlertEvent.shipment_id == sid)
+    )
+    from app.models.tracking_event import ShipmentTrackingEvent
+    await db.execute(
+        __import__("sqlalchemy", fromlist=["delete"]).delete(ShipmentTrackingEvent).where(
+            ShipmentTrackingEvent.shipment_id == sid
+        )
+    )
+    await db.delete(shipment)
+    await db.commit()
 
 
 @router.post("/{guia_id}/refresh")

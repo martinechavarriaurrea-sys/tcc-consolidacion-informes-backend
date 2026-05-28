@@ -8,6 +8,7 @@ from app.api.deps import get_report_service
 from app.models.shipment import Shipment
 from app.schemas.dashboard import DashboardSummary
 from app.services.report_service import ReportService
+from app.utils.status_normalizer import effective_status
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -34,7 +35,7 @@ async def get_stats(svc: ReportService = Depends(get_report_service)):
     guias_activas = [
         {
             "numero_guia": ship.tracking_number,
-            "estado_actual": ship.current_status or "desconocido",
+            "estado_actual": effective_status(ship.current_status, ship.current_status_raw),
             "ultima_actualizacion": ship.current_status_at.isoformat() if ship.current_status_at else None,
         }
         for ship in active_shipments
