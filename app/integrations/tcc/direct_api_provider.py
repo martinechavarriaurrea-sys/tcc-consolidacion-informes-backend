@@ -212,6 +212,10 @@ class TCCDirectApiProvider(TrackingProvider):
             client_name = remesa.get("nombredestinatario")
             destination = remesa.get("ciudaddestino", {}).get("descripcion")
 
+            # Fecha de despacho desde TCC (fecharemesa)
+            fecha_remesa_dt = _strip_tz(_parse_date(remesa.get("fecharemesa")))
+            shipping_date_from_tcc = fecha_remesa_dt.date() if fecha_remesa_dt else None
+
             def _sort_key(e):
                 dt = e.event_at
                 if dt is None:
@@ -244,6 +248,7 @@ class TCCDirectApiProvider(TrackingProvider):
                 current_status_at=_strip_tz(latest.event_at) if latest else None,
                 client_name=client_name,
                 destination=destination,
+                shipping_date=shipping_date_from_tcc,
                 events=events,
                 payload_snapshot=snapshot,
                 fetch_success=True,
