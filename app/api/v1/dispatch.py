@@ -75,6 +75,8 @@ def _parse_run(run: dict) -> dict:
             duration = max(0, int((u - s).total_seconds()))
     except Exception:
         pass
+    event = run.get("event", "unknown")
+    tipo = "automatico" if event == "schedule" else "manual" if event == "workflow_dispatch" else event
     return {
         "run_id": run["id"],
         "status": run.get("status", "unknown"),
@@ -83,7 +85,8 @@ def _parse_run(run: dict) -> dict:
         "updated_at": updated,
         "duration_seconds": duration,
         "url": run.get("html_url"),
-        "event": run.get("event"),
+        "event": event,
+        "tipo": tipo,
     }
 
 
@@ -201,7 +204,7 @@ async def get_run_status():
             resp = await client.get(
                 f"{_GITHUB_API}/repos/{repo}/actions/runs",
                 headers=_gh_headers(token),
-                params={"event": "workflow_dispatch", "per_page": "5"},
+                params={"per_page": "5"},  # todos los tipos: schedule + workflow_dispatch
             )
     except httpx.TimeoutException:
         raise HTTPException(status_code=503, detail="GitHub API no responde al consultar estado.")
