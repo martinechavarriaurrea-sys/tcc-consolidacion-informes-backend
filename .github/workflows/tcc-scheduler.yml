@@ -2,17 +2,13 @@ name: TCC Scheduler
 
 on:
   schedule:
-    # America/Bogota is UTC-5 year round. Tracking cada 2h, reportes a las 07/12/16.
+    # America/Bogota = UTC-5. Tracking cada 3h de 04:00 a 19:00 Bogota.
+    - cron: "0 9 * * *"       # 04:00 Bogota — solo tracking
     - cron: "0 12 * * *"      # 07:00 Bogota — tracking + reporte 0700
-    - cron: "0 14 * * *"      # 09:00 Bogota — solo tracking
-    - cron: "0 16 * * *"      # 11:00 Bogota — solo tracking
-    - cron: "0 17 * * *"      # 12:00 Bogota — tracking + reporte 1200
+    - cron: "0 15 * * *"      # 10:00 Bogota — solo tracking
     - cron: "0 18 * * *"      # 13:00 Bogota — solo tracking
-    - cron: "0 20 * * *"      # 15:00 Bogota — solo tracking
     - cron: "0 21 * * *"      # 16:00 Bogota — tracking + reporte 1600
-    - cron: "0 22 * * *"      # 17:00 Bogota — solo tracking
     - cron: "0 0 * * *"       # 19:00 Bogota — solo tracking
-    - cron: "30 9 * * *"      # 04:30 Bogota — solo tracking
     - cron: "0 11 * * 1"      # cleanup, Monday 06:00 Bogota
   workflow_dispatch:
     inputs:
@@ -82,17 +78,12 @@ jobs:
               echo "job=daily" >> "$GITHUB_OUTPUT"
               echo "cycle=0700" >> "$GITHUB_OUTPUT"
               ;;
-            "0 17 * * *")
-              echo "path=/api/cron/daily-dispatch?cycle=1200" >> "$GITHUB_OUTPUT"
-              echo "job=daily" >> "$GITHUB_OUTPUT"
-              echo "cycle=1200" >> "$GITHUB_OUTPUT"
-              ;;
             "0 21 * * *")
               echo "path=/api/cron/daily-dispatch?cycle=1600" >> "$GITHUB_OUTPUT"
               echo "job=daily" >> "$GITHUB_OUTPUT"
               echo "cycle=1600" >> "$GITHUB_OUTPUT"
               ;;
-            "0 14 * * *" | "0 16 * * *" | "0 18 * * *" | "0 20 * * *" | "0 22 * * *" | "0 0 * * *" | "30 9 * * *")
+            "0 9 * * *" | "0 15 * * *" | "0 18 * * *" | "0 0 * * *")
               # Solo tracking — sin reporte
               echo "path=" >> "$GITHUB_OUTPUT"
               echo "job=daily" >> "$GITHUB_OUTPUT"
