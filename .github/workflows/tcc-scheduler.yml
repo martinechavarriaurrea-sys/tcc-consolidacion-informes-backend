@@ -12,6 +12,7 @@ on:
     - cron: "0 21 * * *"      # 16:00 Bogota — tracking + reporte 1600
     - cron: "0 22 * * *"      # 17:00 Bogota — solo tracking
     - cron: "0 0 * * *"       # 19:00 Bogota — solo tracking
+    - cron: "30 9 * * *"      # 04:30 Bogota — solo tracking
     - cron: "0 11 * * 1"      # cleanup, Monday 06:00 Bogota
   workflow_dispatch:
     inputs:
@@ -91,7 +92,7 @@ jobs:
               echo "job=daily" >> "$GITHUB_OUTPUT"
               echo "cycle=1600" >> "$GITHUB_OUTPUT"
               ;;
-            "0 14 * * *" | "0 16 * * *" | "0 18 * * *" | "0 20 * * *" | "0 22 * * *" | "0 0 * * *")
+            "0 14 * * *" | "0 16 * * *" | "0 18 * * *" | "0 20 * * *" | "0 22 * * *" | "0 0 * * *" | "30 9 * * *")
               # Solo tracking — sin reporte
               echo "path=" >> "$GITHUB_OUTPUT"
               echo "job=daily" >> "$GITHUB_OUTPUT"
