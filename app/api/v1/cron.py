@@ -334,6 +334,7 @@ async def apply_migration(authorization: str | None = Header(default=None)):
     async with AsyncSessionLocal() as session:
         for stmt, label in [
             ("ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shipping_date DATE", "shipping_date"),
+            ("ALTER TABLE shipments ADD COLUMN IF NOT EXISTS numero_remision VARCHAR(100)", "numero_remision"),
             ("ALTER TABLE report_files ADD COLUMN IF NOT EXISTS content_b64 TEXT", "report_files.content_b64"),
             ("ALTER TABLE report_files ADD COLUMN IF NOT EXISTS content_type VARCHAR(100)", "report_files.content_type"),
         ]:

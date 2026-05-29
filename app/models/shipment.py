@@ -13,6 +13,7 @@ class Shipment(Base):
     tracking_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     advisor_name: Mapped[str] = mapped_column(String(200), nullable=False)
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    numero_remision: Mapped[str | None] = mapped_column(String(100), nullable=True)
     package_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     destination: Mapped[str | None] = mapped_column(String(300), nullable=True)
     shipping_date: Mapped["date | None"] = mapped_column(Date, nullable=True)

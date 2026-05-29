@@ -8,6 +8,7 @@ class ShipmentCreate(BaseModel):
     tracking_number: str = Field(..., min_length=1, max_length=100)
     advisor_name: str = Field(..., min_length=1, max_length=200)
     client_name: str | None = Field(None, max_length=200)
+    numero_remision: str | None = Field(None, max_length=100)
     package_type: str | None = Field(None, max_length=100)
     destination: str | None = Field(None, max_length=300)
     shipping_date: date | None = Field(None, description="Fecha en que se despachó la guía")
@@ -26,6 +27,7 @@ class ShipmentCreate(BaseModel):
 class ShipmentUpdate(BaseModel):
     advisor_name: str | None = Field(None, max_length=200)
     client_name: str | None = Field(None, max_length=200)
+    numero_remision: str | None = Field(None, max_length=100)
     package_type: str | None = Field(None, max_length=100)
     destination: str | None = Field(None, max_length=300)
     shipping_date: date | None = Field(None)
@@ -51,6 +53,7 @@ class ShipmentOut(BaseModel):
     tracking_number: str
     advisor_name: str
     client_name: str | None
+    numero_remision: str | None
     package_type: str | None
     destination: str | None
     current_status: str
