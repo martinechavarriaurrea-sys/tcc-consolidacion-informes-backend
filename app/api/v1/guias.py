@@ -44,6 +44,7 @@ def _to_resumen(shipment: Shipment, tiene_alerta: bool) -> dict:
         "numero_guia": shipment.tracking_number,
         "asesor": shipment.advisor_name,
         "cliente": shipment.client_name,
+        "numero_remision": shipment.numero_remision,
         "estado_actual": effective_status(
             shipment.current_status,
             shipment.current_status_raw,
@@ -70,6 +71,7 @@ def _to_detail(shipment: Shipment, alertas: list, historial: list) -> dict:
         "numero_guia": shipment.tracking_number,
         "asesor": shipment.advisor_name,
         "cliente": shipment.client_name,
+        "numero_remision": shipment.numero_remision,
         "estado_actual": effective_status(
             shipment.current_status,
             shipment.current_status_raw,
@@ -91,6 +93,7 @@ class RegistrarGuiaPayload(BaseModel):
     numero_guia: str
     asesor: str
     cliente: str | None = None
+    numero_remision: str | None = None
     fecha_despacho: date | None = None
 
 
@@ -167,6 +170,7 @@ async def create_guia(
             tracking_number=payload.numero_guia,
             advisor_name=payload.asesor,
             client_name=payload.cliente,
+            numero_remision=payload.numero_remision,
             shipping_date=payload.fecha_despacho,
         ))
     except DuplicateError:
