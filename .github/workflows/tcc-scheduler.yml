@@ -36,7 +36,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -115,7 +115,6 @@ jobs:
           echo "token=${token}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout backend worker
-        if: steps.target.outputs.job == 'daily'
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -174,6 +173,38 @@ jobs:
 
             echo "Attempt ${attempt} failed with HTTP ${status}" >&2
             sleep $((attempt * 20))
+          done
+
+          exit 1
+
+      # GitHub deshabilita los workflows programados tras 60 dias sin actividad
+      # en el repositorio (fue lo que congelo el tracking el 2026-07-28). Este
+      # paso hace un commit semanal para reiniciar ese contador.
+      - name: Keepalive — evitar disabled_inactivity
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          semana=$(date -u +%G-W%V)
+          if [[ -f .github/keepalive && "$(cat .github/keepalive)" == "${semana}" ]]; then
+            echo "Keepalive ya registrado para ${semana}."
+            exit 0
+          fi
+
+          echo "${semana}" > .github/keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive
+          git commit -m "chore: keepalive scheduler ${semana} [skip ci]"
+
+          # La rama puede haber avanzado durante el ciclo de tracking.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push intento ${attempt} fallido, reintentando" >&2
+            git pull --rebase origin "${GITHUB_REF_NAME}"
           done
 
           exit 1
