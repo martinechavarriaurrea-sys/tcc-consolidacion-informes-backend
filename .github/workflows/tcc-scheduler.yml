@@ -22,11 +22,12 @@ on:
           - weekly
           - cleanup
       cycle:
-        description: "Daily cycle"
+        description: "Daily cycle (solo-tracking = refresca datos sin generar ni enviar informe)"
         required: false
-        default: "0700"
+        default: "solo-tracking"
         type: choice
         options:
+          - "solo-tracking"
           - "0700"
           - "1200"
           - "1600"
@@ -56,9 +57,15 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             case "${{ inputs.job }}" in
               daily)
-                echo "path=/api/cron/daily-dispatch?cycle=${{ inputs.cycle }}" >> "$GITHUB_OUTPUT"
+                # "solo-tracking" => cycle vacio: el worker consulta TCC y
+                # actualiza la BD, pero no genera informe ni envia correo.
+                cycle="${{ inputs.cycle }}"
+                if [[ "${cycle}" == "solo-tracking" ]]; then
+                  cycle=""
+                fi
+                echo "path=/api/cron/daily-dispatch?cycle=${cycle}" >> "$GITHUB_OUTPUT"
                 echo "job=daily" >> "$GITHUB_OUTPUT"
-                echo "cycle=${{ inputs.cycle }}" >> "$GITHUB_OUTPUT"
+                echo "cycle=${cycle}" >> "$GITHUB_OUTPUT"
                 ;;
               weekly)
                 echo "path=/api/cron/weekly" >> "$GITHUB_OUTPUT"
